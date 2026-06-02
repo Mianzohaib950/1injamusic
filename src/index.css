@@ -1,0 +1,247 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --font-sans: "DM Sans", sans-serif;
+  --font-bebas: "Bebas Neue", sans-serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --brand-black: #0A0A0A;
+  --brand-dark: #111111;
+  --brand-card: #161616;
+  --brand-border: #222222;
+  --brand-yellow: #E8FF00;
+  --brand-yellow-dim: #B8CC00;
+  --brand-green: #39FF14;
+  --brand-white: #F5F5F5;
+  --brand-gray: #888888;
+
+  --background: 0 0% 4%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 8.6%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 0 0% 13.3%;
+  --border: 0 0% 13.3%;
+  --input: 0 0% 13.3%;
+  --primary: 66 100% 50%;
+  --primary-foreground: 0 0% 4%;
+  --secondary: 0 0% 7%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 0 0% 53%;
+  --accent: 66 100% 50%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 66 100% 50%;
+  --radius: 0.5rem;
+  --popover: 0 0% 8.6%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 0 0% 13.3%;
+  --sidebar: 0 0% 7%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 0 0% 13.3%;
+  --sidebar-primary: 66 100% 50%;
+  --sidebar-primary-foreground: 0 0% 4%;
+  --sidebar-accent: 0 0% 10%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-ring: 66 100% 50%;
+  --chart-1: 66 100% 50%;
+  --chart-2: 120 100% 54%;
+  --chart-3: 0 0% 53%;
+  --chart-4: 0 0% 30%;
+  --chart-5: 0 0% 20%;
+}
+
+.dark {
+  --background: 0 0% 4%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 8.6%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 0 0% 13.3%;
+  --border: 0 0% 13.3%;
+  --input: 0 0% 13.3%;
+  --primary: 66 100% 50%;
+  --primary-foreground: 0 0% 4%;
+  --secondary: 0 0% 7%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 0 0% 53%;
+  --accent: 66 100% 50%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 66 100% 50%;
+  --popover: 0 0% 8.6%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 0 0% 13.3%;
+  --sidebar: 0 0% 7%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 0 0% 13.3%;
+  --sidebar-primary: 66 100% 50%;
+  --sidebar-primary-foreground: 0 0% 4%;
+  --sidebar-accent: 0 0% 10%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-ring: 66 100% 50%;
+  --chart-1: 66 100% 50%;
+  --chart-2: 120 100% 54%;
+  --chart-3: 0 0% 53%;
+  --chart-4: 0 0% 30%;
+  --chart-5: 0 0% 20%;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  * {
+    @apply border-border;
+  }
+  html, body {
+    overflow-x: hidden;
+  }
+  body {
+    @apply font-sans antialiased text-foreground cursor-none;
+    background-color: var(--brand-black);
+  }
+
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-bebas);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+}
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-ticker {
+  animation: ticker 25s linear infinite;
+}
+
+@keyframes ticker-reverse {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+.animate-ticker-reverse {
+  animation: ticker-reverse 28s linear infinite;
+}
+
+/* Hero grid — static, no animation (grid-drift was a GPU hog) */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(232,255,0,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232,255,0,0.05) 1px, transparent 1px);
+  background-size: 80px 80px;
+}
+
+/* Orbs — CSS-only, no JS, will-change for GPU promotion */
+.orb-1, .orb-2, .orb-pulse {
+  will-change: opacity;
+}
+@keyframes orb-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 0.85; }
+}
+.orb-1 { opacity: 0.7; }
+.orb-2 { opacity: 0.5; }
+.orb-pulse { animation: orb-pulse 8s ease-in-out infinite; }
+
+/* Waveform bars */
+@keyframes wave-bar {
+  0%, 100% { height: 8px; }
+  50%       { height: 100%; }
+}
+.waveform-bar {
+  min-height: 8px;
+  max-height: 100%;
+  animation: wave-bar 1.2s ease-in-out infinite;
+}
+
+/* CTA button glow pulse */
+@keyframes cta-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(232,255,0,0.2); }
+  50%       { box-shadow: 0 0 30px rgba(232,255,0,0.5), 0 0 60px rgba(232,255,0,0.2); }
+}
+.hero-cta-glow {
+  animation: cta-glow 3s ease-in-out infinite;
+}
+
+/* Floating card hover lift */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+/* Stat box pulse border */
+@keyframes border-glow {
+  0%, 100% { box-shadow: 0 0 0px rgba(232,255,0,0); }
+  50%       { box-shadow: 0 0 20px rgba(232,255,0,0.25); }
+}
+.stat-glow {
+  animation: border-glow 3s ease-in-out infinite;
+}
+
+/* Marquee yellow text shimmer */
+@keyframes shimmer {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+/* Section label pulse */
+@keyframes label-pulse {
+  0%, 100% { letter-spacing: 0.2em; opacity: 1; }
+  50%       { letter-spacing: 0.25em; opacity: 0.8; }
+}
+.label-animate {
+  animation: label-pulse 4s ease-in-out infinite;
+}
