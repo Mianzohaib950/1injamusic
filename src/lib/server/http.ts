@@ -15,6 +15,12 @@ export function serverError(error: unknown) {
   }
 
   const code = getDatabaseErrorCode(error);
+  const type = (error as any)?.type;
+  const message = String((error as Error)?.message ?? "");
+
+  if (typeof type === "string" && type.startsWith("Stripe")) {
+    return apiError(`Payment provider error: ${message || "Check Stripe configuration and try again."}`, 502);
+  }
 
   if (code === "28P01") {
     return apiError("Database authentication failed. Check DATABASE_URL.", 503);
@@ -24,11 +30,11 @@ export function serverError(error: unknown) {
     return apiError("Database is unavailable. Check DATABASE_URL and network access.", 503);
   }
 
-  if ((error as Error)?.message?.includes("DATABASE_URL")) {
+  if (message.includes("DATABASE_URL")) {
     return apiError("Database is not configured. Check DATABASE_URL.", 503);
   }
 
-  return apiError("Internal server error", 500);
+  return apiError(message || "Internal server error", 500);
 }
 
 export function noContent() {

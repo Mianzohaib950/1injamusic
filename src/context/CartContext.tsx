@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useState, useEffect, ReactNode } from "react";
-import type { MerchProduct } from "@/data/merch";
+import { merchProducts, type MerchProduct } from "@/data/merch";
 
 export interface CartItem {
   cartKey: string;
@@ -22,6 +22,59 @@ type CartAction =
   | { type: "UPDATE_QTY"; cartKey: string; quantity: number }
   | { type: "CLEAR" }
   | { type: "LOAD"; items: CartItem[] };
+
+function findProductForStoredItem(item: Partial<CartItem> & { id?: string }) {
+  const possibleIds = [
+    item.productId,
+    item.id,
+    typeof item.cartKey === "string" ? item.cartKey.split("::")[0] : undefined,
+  ].filter(Boolean);
+
+  return (
+    possibleIds
+      .map((id) => merchProducts.find((product) => product.id === id))
+      .find(Boolean) ??
+    merchProducts.find((product) => product.name === item.name) ??
+    null
+  );
+}
+
+function normalizeStoredCartItems(items: unknown): CartItem[] {
+  if (!Array.isArray(items)) return [];
+
+  const normalized = items
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const storedItem = item as Partial<CartItem> & { id?: string };
+      const product = findProductForStoredItem(storedItem);
+      if (!product) return null;
+
+      const size = storedItem.size || product.sizes[0] || "One Size";
+      const quantity = Math.max(1, Number(storedItem.quantity) || 1);
+
+      return {
+        cartKey: `${product.id}::${size}`,
+        productId: product.id,
+        name: product.name,
+        artist: product.artist,
+        price: product.price,
+        image: product.image,
+        size,
+        quantity,
+      };
+    })
+    .filter((item): item is CartItem => Boolean(item));
+
+  return normalized.reduce<CartItem[]>((items, item) => {
+    const existing = items.find((candidate) => candidate.cartKey === item.cartKey);
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      items.push(item);
+    }
+    return items;
+  }, []);
+}
 
 function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
@@ -77,7 +130,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem("1nja_cart");
       if (stored) {
-        dispatch({ type: "LOAD", items: JSON.parse(stored) });
+        dispatch({ type: "LOAD", items: normalizeStoredCartItems(JSON.parse(stored)) });
       }
     } catch {}
   }, []);

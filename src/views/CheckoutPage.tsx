@@ -24,6 +24,16 @@ interface ShippingForm {
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
+function getPaymentItems(cartItems: any[]) {
+  return cartItems.map((item) => ({
+    productId: item.productId,
+    cartKey: item.cartKey,
+    name: item.name,
+    size: item.size,
+    quantity: item.quantity,
+  }));
+}
+
 function CheckoutForm({
   cartItems,
   totalPrice,
@@ -73,7 +83,7 @@ function CheckoutForm({
     setProcessing(true);
     try {
       const { clientSecret, orderId } = await apiPost<{ clientSecret: string; orderId: string }>("/payment/create-payment-intent", {
-        items: cartItems.map((item) => ({ productId: item.productId, size: item.size, quantity: item.quantity })),
+        items: getPaymentItems(cartItems),
         shippingAddress: shipping,
       });
 
@@ -191,7 +201,7 @@ function DemoCheckoutForm({
     setProcessing(true);
     try {
       const { orderId } = await apiPost<{ clientSecret: string | null; orderId: string; demo?: boolean }>("/payment/create-payment-intent", {
-        items: cartItems.map((item) => ({ productId: item.productId, size: item.size, quantity: item.quantity })),
+        items: getPaymentItems(cartItems),
         shippingAddress: shipping,
       });
 
