@@ -21,7 +21,10 @@ function getConnectionString() {
 
 export function getPool() {
   if (!globalThis.__dbPool) {
-    globalThis.__dbPool = new Pool({ connectionString: getConnectionString() });
+    globalThis.__dbPool = new Pool({
+      connectionString: getConnectionString(),
+      connectionTimeoutMillis: 3000,
+    });
   }
   return globalThis.__dbPool;
 }

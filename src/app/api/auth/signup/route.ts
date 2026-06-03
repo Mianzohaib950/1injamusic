@@ -7,6 +7,19 @@ import { createDevUser, isDevAuthStoreEnabled, publicUser } from "@/lib/server/d
 
 export const runtime = "nodejs";
 
+async function signupWithDevStore(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+}) {
+  const user = await createDevUser(input);
+  if (!user) return apiError("An account with that email already exists.", 409);
+
+  const token = signJwt({ sub: user.id, email: user.email, role: user.role });
+  return json({ user: publicUser(user), token }, { status: 201 });
+}
+
 export async function POST(request: Request) {
   try {
     const { name, email, phone, password } = await readJson(request);
@@ -15,15 +28,20 @@ export async function POST(request: Request) {
     }
 
     if (isDevAuthStoreEnabled()) {
-      const user = await createDevUser({ name, email, phone, password });
-      if (!user) return apiError("An account with that email already exists.", 409);
-
-      const token = signJwt({ sub: user.id, email: user.email, role: user.role });
-      return json({ user: publicUser(user), token }, { status: 201 });
+      return signupWithDevStore({ name, email, phone, password });
     }
 
     const db = getDb();
-    const existingUsers = await db.select().from(users).where(eq(users.email, email));
+    let existingUsers;
+    try {
+      existingUsers = await db.select().from(users).where(eq(users.email, email));
+    } catch (error) {
+      if (isDevAuthStoreEnabled(error)) {
+        return signupWithDevStore({ name, email, phone, password });
+      }
+      throw error;
+    }
+
     if (existingUsers.length > 0) {
       return apiError("An account with that email already exists.", 409);
     }

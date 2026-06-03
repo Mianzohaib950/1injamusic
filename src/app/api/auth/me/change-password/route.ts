@@ -6,6 +6,17 @@ import { findDevUserById, isDevAuthStoreEnabled, updateDevUser } from "@/lib/ser
 
 export const runtime = "nodejs";
 
+async function changeDevPassword(id: string, currentPassword: string, newPassword: string) {
+  const user = await findDevUserById(id);
+  if (!user) return apiError("User not found", 404);
+  if (user.passwordHash !== hashPassword(currentPassword)) {
+    return apiError("Current password is incorrect", 401);
+  }
+
+  await updateDevUser(id, { passwordHash: hashPassword(newPassword) });
+  return json({ success: true });
+}
+
 export async function POST(request: Request) {
   const auth = requireAuth(request);
   if (auth instanceof Response) return auth;
@@ -15,18 +26,20 @@ export async function POST(request: Request) {
     if (!currentPassword || !newPassword) return apiError("Missing password fields", 400);
 
     if (isDevAuthStoreEnabled()) {
-      const user = await findDevUserById(auth.sub);
-      if (!user) return apiError("User not found", 404);
-      if (user.passwordHash !== hashPassword(currentPassword)) {
-        return apiError("Current password is incorrect", 401);
-      }
-
-      await updateDevUser(auth.sub, { passwordHash: hashPassword(newPassword) });
-      return json({ success: true });
+      return changeDevPassword(auth.sub, currentPassword, newPassword);
     }
 
     const db = getDb();
-    const results = await db.select().from(users).where(eq(users.id, auth.sub));
+    let results;
+    try {
+      results = await db.select().from(users).where(eq(users.id, auth.sub));
+    } catch (error) {
+      if (isDevAuthStoreEnabled(error)) {
+        return changeDevPassword(auth.sub, currentPassword, newPassword);
+      }
+      throw error;
+    }
+
     const user = results[0];
     if (!user) return apiError("User not found", 404);
     if (user.passwordHash !== hashPassword(currentPassword)) {

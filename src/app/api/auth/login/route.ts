@@ -6,6 +6,16 @@ import { findDevUserByEmail, isDevAuthStoreEnabled, publicUser } from "@/lib/ser
 
 export const runtime = "nodejs";
 
+async function loginWithDevStore(email: string, password: string) {
+  const user = await findDevUserByEmail(email);
+  if (!user || user.passwordHash !== hashPassword(password)) {
+    return apiError("Invalid credentials", 401);
+  }
+
+  const token = signJwt({ sub: user.id, email: user.email, role: user.role });
+  return json({ user: publicUser(user), token });
+}
+
 export async function POST(request: Request) {
   try {
     const { email, password } = await readJson(request);
@@ -14,16 +24,19 @@ export async function POST(request: Request) {
     }
 
     if (isDevAuthStoreEnabled()) {
-      const user = await findDevUserByEmail(email);
-      if (!user || user.passwordHash !== hashPassword(password)) {
-        return apiError("Invalid credentials", 401);
-      }
-
-      const token = signJwt({ sub: user.id, email: user.email, role: user.role });
-      return json({ user: publicUser(user), token });
+      return loginWithDevStore(email, password);
     }
 
-    const results = await getDb().select().from(users).where(eq(users.email, email));
+    let results;
+    try {
+      results = await getDb().select().from(users).where(eq(users.email, email));
+    } catch (error) {
+      if (isDevAuthStoreEnabled(error)) {
+        return loginWithDevStore(email, password);
+      }
+      throw error;
+    }
+
     const user = results[0];
     if (!user || user.passwordHash !== hashPassword(password)) {
       return apiError("Invalid credentials", 401);

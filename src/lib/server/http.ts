@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getDatabaseErrorCode, isRecoverableDatabaseError } from "./dbErrors";
 
 export function json(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -9,11 +10,18 @@ export function apiError(message: string, status = 400) {
 }
 
 export function serverError(error: unknown) {
-  const cause = (error as any)?.cause;
-  const code = cause?.code ?? (error as any)?.code;
+  if (process.env.NODE_ENV !== "production") {
+    console.error(error);
+  }
+
+  const code = getDatabaseErrorCode(error);
 
   if (code === "28P01") {
     return apiError("Database authentication failed. Check DATABASE_URL.", 503);
+  }
+
+  if (isRecoverableDatabaseError(error)) {
+    return apiError("Database is unavailable. Check DATABASE_URL and network access.", 503);
   }
 
   if ((error as Error)?.message?.includes("DATABASE_URL")) {

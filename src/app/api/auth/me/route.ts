@@ -6,17 +6,30 @@ import { findDevUserById, isDevAuthStoreEnabled, publicUser, updateDevUser } fro
 
 export const runtime = "nodejs";
 
+async function getDevProfile(id: string) {
+  const user = await findDevUserById(id);
+  return user ? json(publicUser(user)) : apiError("User not found", 404);
+}
+
 export async function GET(request: Request) {
   const auth = requireAuth(request);
   if (auth instanceof Response) return auth;
 
   try {
     if (isDevAuthStoreEnabled()) {
-      const user = await findDevUserById(auth.sub);
-      return user ? json(publicUser(user)) : apiError("User not found", 404);
+      return getDevProfile(auth.sub);
     }
 
-    const results = await getDb().select().from(users).where(eq(users.id, auth.sub));
+    let results;
+    try {
+      results = await getDb().select().from(users).where(eq(users.id, auth.sub));
+    } catch (error) {
+      if (isDevAuthStoreEnabled(error)) {
+        return getDevProfile(auth.sub);
+      }
+      throw error;
+    }
+
     const user = results[0];
     if (!user) return apiError("User not found", 404);
 
@@ -47,8 +60,18 @@ export async function PUT(request: Request) {
     }
 
     const db = getDb();
-    await db.update(users).set({ name: name ?? undefined, phone: phone ?? undefined }).where(eq(users.id, auth.sub));
-    const results = await db.select().from(users).where(eq(users.id, auth.sub));
+    let results;
+    try {
+      await db.update(users).set({ name: name ?? undefined, phone: phone ?? undefined }).where(eq(users.id, auth.sub));
+      results = await db.select().from(users).where(eq(users.id, auth.sub));
+    } catch (error) {
+      if (isDevAuthStoreEnabled(error)) {
+        const user = await updateDevUser(auth.sub, { name: name ?? undefined, phone: phone ?? undefined });
+        return user ? json(publicUser(user)) : apiError("User not found", 404);
+      }
+      throw error;
+    }
+
     const user = results[0];
     if (!user) return apiError("User not found", 404);
 

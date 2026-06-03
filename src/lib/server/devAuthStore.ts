@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
 import { hashPassword } from "./auth";
+import { isRecoverableDatabaseError } from "./dbErrors";
 
 export interface DevUser {
   id: string;
@@ -23,8 +24,16 @@ export function isDevAuthStoreEnabled(error?: unknown) {
     !databaseUrl ||
     /user:password|localhost:5432\/1njamaimusic|placeholder|your_/i.test(databaseUrl);
 
-  const code = (error as any)?.cause?.code ?? (error as any)?.code;
-  return isPlaceholder || code === "28P01";
+  return isPlaceholder || isMalformedDatabaseUrl(databaseUrl) || isRecoverableDatabaseError(error);
+}
+
+function isMalformedDatabaseUrl(databaseUrl: string) {
+  try {
+    const url = new URL(databaseUrl);
+    return /^postgres(ql)?:$/.test(url.protocol) && Boolean(url.username) && !url.password;
+  } catch {
+    return Boolean(databaseUrl);
+  }
 }
 
 async function readUsers() {
