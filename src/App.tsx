@@ -65,6 +65,7 @@ function App() {
                   <Route path="/account" element={<AccountPage />} />
                   <Route path="/admin" element={<AdminPage />} />
                   <Route path="/admin/:section" element={<AdminPage />} />
+                  <Route path="/admin/orders/:orderId" element={<AdminPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AnimatePresence>

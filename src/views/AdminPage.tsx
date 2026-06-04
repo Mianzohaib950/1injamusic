@@ -45,6 +45,24 @@ function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function shortId(value: string, max = 18) {
+  if (!value) return "";
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function AdminShell({ section, children }: { section: AdminSection; children: React.ReactNode }) {
   const navigate = useNavigate();
 
@@ -262,16 +280,236 @@ function ArtistsPanel() {
   );
 }
 
-function OrdersPanel() {
-  const { data, loading, error, reload } = useAdminData<any[]>("/admin/orders", []);
+type AdminOrder = {
+  id: string;
+  userId: string;
+  status: string;
+  subtotalCents: number;
+  shippingCents: number;
+  taxCents: number;
+  totalCents: number;
+  firstName: string;
+  lastName: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+  createdAt: string;
+  customer: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    role: string;
+    createdAt: string;
+  } | null;
+  items: {
+    id: string;
+    productId: string;
+    name: string;
+    artist: string;
+    image: string;
+    size: string;
+    quantity: number;
+    price: number;
+  }[];
+};
+
+function OrdersPanel({ orderId }: { orderId?: string }) {
+  const navigate = useNavigate();
+  const { data, loading, error, reload } = useAdminData<AdminOrder[]>("/admin/orders", []);
   const statuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+  const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+
+  const refreshDetail = async (id: string) => {
+    try {
+      setDetailLoading(true);
+      setDetailError("");
+      const detail = await apiGet<AdminOrder>(`/admin/orders/${id}`);
+      setSelectedOrder(detail);
+    } catch (error: any) {
+      setSelectedOrder(null);
+      setDetailError(error?.message ?? "Unable to load order detail.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!orderId) {
+      setSelectedOrder(null);
+      setDetailError("");
+      setDetailLoading(false);
+      return;
+    }
+    refreshDetail(orderId);
+  }, [orderId]);
+
   return (
     <CrudLayout title="ORDERS" loading={loading} error={error}>
-      <AdminTable rows={data} columns={["id", "status", "totalCents", "createdAt"]} actions={(row) => (
-        <select className={inputClass} value={row.status} onChange={async (e) => { await apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value }); await reload(); }}>
-          {statuses.map((status) => <option key={status}>{status}</option>)}
-        </select>
-      )} />
+      {!orderId && (
+        <div className={`${panelClass} overflow-x-auto`}>
+          <table className="w-full table-fixed">
+            <thead>
+              <tr className="border-b border-[#222]">
+                <th className="w-[19%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">ID</th>
+                <th className="w-[10%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">USER</th>
+                <th className="w-[17%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">PRODUCTS</th>
+                <th className="w-[9%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">TOTAL</th>
+                <th className="w-[14%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">CREATED</th>
+                <th className="w-[13%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">STATUS</th>
+                <th className="w-[18%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row) => (
+                <tr key={row.id} className="border-b border-[#222]">
+                  <td className="px-2 py-3 text-white font-sans text-sm truncate">{shortId(row.id)}</td>
+                  <td className="px-2 py-3 text-white font-sans text-sm truncate">{row.customer?.name || `${row.firstName} ${row.lastName}`}</td>
+                  <td className="px-2 py-3 text-white font-mono text-[11px] leading-4 truncate">
+                    {row.items.length > 0 ? row.items.map((item) => item.name).join(", ") : "-"}
+                  </td>
+                  <td className="px-2 py-3 text-white font-sans text-sm whitespace-nowrap">{money(row.totalCents)}</td>
+                  <td className="px-2 py-3 text-white font-sans text-sm">
+                    <span className="block truncate">{formatDateTime(row.createdAt)}</span>
+                  </td>
+                  <td className="px-2 py-3 text-white font-sans text-sm">
+                    <span className="block truncate">{row.status}</span>
+                  </td>
+                  <td className="px-2 py-3">
+                    <div className="flex flex-col gap-1 w-full">
+                      <button
+                        className={`${ghostClass} w-full text-xs py-1`}
+                        onClick={() => navigate(`/admin/orders/${row.id}`)}
+                      >
+                        VIEW
+                      </button>
+                      <select
+                        className="w-full bg-[#111] border border-[#333] text-white font-sans px-1 py-1 text-xs focus:border-[var(--brand-yellow)] focus:outline-none"
+                        value={row.status}
+                        onChange={async (e) => {
+                          await apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value });
+                          await reload();
+                        }}
+                      >
+                        {statuses.map((status) => <option key={status}>{status}</option>)}
+                      </select>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {data.length === 0 && (
+                <tr>
+                  <td className="px-4 py-8 text-[var(--brand-gray)] font-bebas text-xl" colSpan={7}>
+                    No records found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {orderId && (
+        <div className={`${panelClass} mt-6 p-5`}>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h3 className="text-white font-bebas text-3xl">ORDER DETAIL</h3>
+            <button className={ghostClass} onClick={() => navigate("/admin/orders")}>BACK</button>
+          </div>
+
+          {detailLoading && <p className="text-[var(--brand-gray)] font-bebas text-xl">Loading order detail...</p>}
+          {detailError && <p className="text-red-400 font-sans text-sm">{detailError}</p>}
+
+          {!detailLoading && !detailError && selectedOrder && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-[#111] border border-[#222] p-4">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">USER DETAIL</p>
+                  <p className="text-white font-sans text-sm mt-2">Name: {selectedOrder.customer?.name || `${selectedOrder.firstName} ${selectedOrder.lastName}`}</p>
+                  <p className="text-white font-sans text-sm">Email: {selectedOrder.customer?.email || "-"}</p>
+                  <p className="text-white font-sans text-sm">Phone: {selectedOrder.customer?.phone || "-"}</p>
+                  <p className="text-white font-sans text-sm">User ID: {selectedOrder.userId}</p>
+                </div>
+                <div className="bg-[#111] border border-[#222] p-4">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">ORDER DETAIL</p>
+                  <p className="text-white font-sans text-sm mt-2">Order ID: {selectedOrder.id}</p>
+                  <p className="text-white font-sans text-sm">Created: {formatDateTime(selectedOrder.createdAt)}</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="text-white font-sans text-sm">Status</span>
+                    <select
+                      className={inputClass}
+                      value={selectedOrder.status}
+                      onChange={async (e) => {
+                        await apiPut(`/admin/orders/${selectedOrder.id}/status`, { status: e.target.value });
+                        await reload();
+                        await refreshDetail(selectedOrder.id);
+                      }}
+                    >
+                      {statuses.map((status) => <option key={status}>{status}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#111] border border-[#222] p-4">
+                <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">SHIPPING ADDRESS</p>
+                <p className="text-white font-sans text-sm mt-2">{selectedOrder.firstName} {selectedOrder.lastName}</p>
+                <p className="text-white font-sans text-sm">{selectedOrder.address}</p>
+                <p className="text-white font-sans text-sm">{selectedOrder.city}, {selectedOrder.state} {selectedOrder.zip}</p>
+                <p className="text-white font-sans text-sm">{selectedOrder.country}</p>
+              </div>
+
+              <div className="bg-[#111] border border-[#222] overflow-x-auto">
+                <table className="w-full min-w-[760px]">
+                  <thead>
+                    <tr className="border-b border-[#222]">
+                      {["PRODUCT", "NAME", "SIZE", "QTY", "PRICE", "LINE TOTAL"].map((column) => (
+                        <th key={column} className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-4 py-3">{column}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedOrder.items.map((item) => (
+                      <tr key={item.id} className="border-b border-[#222]">
+                        <td className="px-4 py-3">
+                          <img src={item.image} alt={item.name} className="w-12 h-12 object-cover border border-[#222]" />
+                        </td>
+                        <td className="px-4 py-3 text-white font-sans text-sm">{item.name}</td>
+                        <td className="px-4 py-3 text-white font-sans text-sm">{item.size}</td>
+                        <td className="px-4 py-3 text-white font-sans text-sm">{item.quantity}</td>
+                        <td className="px-4 py-3 text-white font-sans text-sm">{money(item.price)}</td>
+                        <td className="px-4 py-3 text-white font-sans text-sm">{money(item.price * item.quantity)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-[#111] border border-[#222] p-3">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">SUBTOTAL</p>
+                  <p className="text-white font-bebas text-2xl">{money(selectedOrder.subtotalCents)}</p>
+                </div>
+                <div className="bg-[#111] border border-[#222] p-3">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">SHIPPING</p>
+                  <p className="text-white font-bebas text-2xl">{money(selectedOrder.shippingCents)}</p>
+                </div>
+                <div className="bg-[#111] border border-[#222] p-3">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">TAX</p>
+                  <p className="text-white font-bebas text-2xl">{money(selectedOrder.taxCents)}</p>
+                </div>
+                <div className="bg-[#111] border border-[#222] p-3">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">TOTAL</p>
+                  <p className="text-[var(--brand-yellow)] font-bebas text-2xl">{money(selectedOrder.totalCents)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </CrudLayout>
   );
 }
@@ -374,11 +612,12 @@ function AdminTable({ rows, columns, actions }: { rows: any[]; columns: string[]
 }
 
 export default function AdminPage() {
-  const { section: sectionParam } = useParams<{ section?: string }>();
+  const { section: sectionParam, orderId } = useParams<{ section?: string; orderId?: string }>();
   const { user, isLoggedIn } = useAuth();
   const section = useMemo<AdminSection>(() => {
+    if (orderId) return "orders";
     return sections.some((item) => item.id === sectionParam) ? (sectionParam as AdminSection) : "dashboard";
-  }, [sectionParam]);
+  }, [sectionParam, orderId]);
 
   if (!isLoggedIn) return <Navigate to="/auth" replace state={{ from: "/admin", tab: "login" }} />;
   if (user?.role !== "admin") return <Navigate to="/account" replace />;
@@ -387,7 +626,7 @@ export default function AdminPage() {
     dashboard: <Dashboard />,
     products: <ProductsPanel />,
     artists: <ArtistsPanel />,
-    orders: <OrdersPanel />,
+    orders: <OrdersPanel orderId={orderId} />,
     users: <UsersPanel />,
     bookings: <BookingsPanel />,
     "event-contacts": <EventContactsPanel />,

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getDb, orderItems, orders } from "@/lib/server/db";
+import { getDb, orderItems, orders, users } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, serverError } from "@/lib/server/http";
 
@@ -20,7 +20,22 @@ export async function GET(
     if (!order) return apiError("Order not found", 404);
 
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
-    return json({ ...order, items });
+    const [customer] = await db.select().from(users).where(eq(users.id, order.userId));
+
+    return json({
+      ...order,
+      customer: customer
+        ? {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            role: customer.role,
+            createdAt: customer.createdAt,
+          }
+        : null,
+      items,
+    });
   } catch (error) {
     return serverError(error);
   }
