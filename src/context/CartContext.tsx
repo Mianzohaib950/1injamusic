@@ -47,18 +47,19 @@ function normalizeStoredCartItems(items: unknown): CartItem[] {
       if (!item || typeof item !== "object") return null;
       const storedItem = item as Partial<CartItem> & { id?: string };
       const product = findProductForStoredItem(storedItem);
-      if (!product) return null;
 
-      const size = storedItem.size || product.sizes[0] || "One Size";
+      const size = storedItem.size || product?.sizes?.[0] || "One Size";
       const quantity = Math.max(1, Number(storedItem.quantity) || 1);
+      const productId = storedItem.productId || storedItem.id || product?.id;
+      if (!productId) return null;
 
       return {
-        cartKey: `${product.id}::${size}`,
-        productId: product.id,
-        name: product.name,
-        artist: product.artist,
-        price: product.price,
-        image: product.image,
+        cartKey: `${productId}::${size}`,
+        productId,
+        name: storedItem.name || product?.name || "Product",
+        artist: storedItem.artist || product?.artist || "Artist",
+        price: Number(storedItem.price ?? product?.price ?? 0),
+        image: storedItem.image || product?.image || "",
         size,
         quantity,
       };

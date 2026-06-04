@@ -100,7 +100,7 @@ export async function findDevUserById(id: string) {
 
 export async function updateDevUser(
   id: string,
-  patch: Partial<Pick<DevUser, "name" | "phone" | "passwordHash">>,
+  patch: Partial<Pick<DevUser, "name" | "phone" | "passwordHash" | "role">>,
 ) {
   const users = await readUsers();
   const index = users.findIndex((user) => user.id === id);
@@ -109,4 +109,8 @@ export async function updateDevUser(
   users[index] = { ...users[index], ...patch };
   await writeUsers(users);
   return users[index];
+}
+
+export async function listDevUsers() {
+  return readUsers();
 }

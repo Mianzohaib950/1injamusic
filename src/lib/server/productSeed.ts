@@ -1,4 +1,5 @@
 import { getDb, products } from "./db";
+import { ensureServerSchema } from "./schemaSync";
 
 const defaultProducts = [
   {
@@ -396,6 +397,7 @@ const defaultProducts = [
 ];
 
 export async function seedProducts() {
+  await ensureServerSchema();
   const db = getDb();
   const existing = await db.select().from(products);
   if (existing.length > 0) {

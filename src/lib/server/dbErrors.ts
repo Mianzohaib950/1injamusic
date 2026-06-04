@@ -11,16 +11,40 @@ export function isRecoverableDatabaseErrorCode(code?: string) {
   ].includes(code ?? "");
 }
 
+function getErrorChain(error: unknown) {
+  const chain: any[] = [];
+  const seen = new Set<any>();
+  let current: any = error;
+
+  while (current && typeof current === "object" && !seen.has(current)) {
+    chain.push(current);
+    seen.add(current);
+    current = current.cause;
+  }
+
+  return chain;
+}
+
 export function getDatabaseErrorCode(error: unknown) {
-  return (error as any)?.cause?.code ?? (error as any)?.code;
+  for (const entry of getErrorChain(error)) {
+    const code = entry?.code;
+    if (typeof code === "string" && code.length > 0) {
+      return code;
+    }
+  }
+
+  return undefined;
 }
 
 export function isRecoverableDatabaseError(error: unknown) {
   const code = getDatabaseErrorCode(error);
   if (isRecoverableDatabaseErrorCode(code)) return true;
 
-  const message = String((error as Error)?.message ?? "");
-  return /SCRAM-SERVER-FIRST-MESSAGE|password must be a string|timeout|connect|ECONNREFUSED|ENOTFOUND/i.test(
-    message,
+  const combinedMessage = getErrorChain(error)
+    .map((entry) => String(entry?.message ?? ""))
+    .join(" ");
+
+  return /SCRAM-SERVER-FIRST-MESSAGE|password must be a string|timeout|terminated unexpectedly|connect|ECONNREFUSED|ENOTFOUND/i.test(
+    combinedMessage,
   );
 }

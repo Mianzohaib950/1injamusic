@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 
 export const products = pgTable("products", {
   id: text("id").primaryKey(),
@@ -12,6 +12,7 @@ export const products = pgTable("products", {
   imageHover: text("image_hover").notNull(),
   description: text("description").notNull(),
   badge: text("badge"),
+  sizes: jsonb("sizes").$type<string[]>().notNull().default(["One Size"]),
   inStock: boolean("in_stock").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

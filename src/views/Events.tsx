@@ -143,7 +143,7 @@ export default function Events() {
             <p className="text-[var(--brand-gray)] font-sans text-lg">Use the form below for fast response direct to our management team.</p>
           </div>
           <div className="bg-[var(--brand-card)] p-8 md:p-12 border border-[var(--brand-border)] rounded-xl">
-            <BookingForm />
+            <BookingForm endpoint="/event-contacts" successMessage="Event contact request sent. Our team will contact you shortly." />
           </div>
         </div>
       </section>

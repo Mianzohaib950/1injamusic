@@ -41,7 +41,7 @@ export interface Order {
   shipping: number;
   tax: number;
   total: number;
-  status: "Pending" | "Processing" | "Shipped" | "Delivered";
+  status: "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
   createdAt: string;
   shippingAddress: Omit<SavedAddress, "id" | "label" | "isDefault">;
 }

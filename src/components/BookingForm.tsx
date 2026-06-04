@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { apiPost } from "@/lib/api";
 
-export default function BookingForm() {
+interface BookingFormProps {
+  endpoint?: string;
+  successMessage?: string;
+}
+
+export default function BookingForm({
+  endpoint = "/bookings",
+  successMessage = "Message sent! We will be in touch within 48 hours.",
+}: BookingFormProps) {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -12,6 +21,7 @@ export default function BookingForm() {
     message: ""
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -24,15 +34,26 @@ export default function BookingForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
-      toast.success("Message sent! We will be in touch within 48 hours.", {
-        style: { background: "var(--brand-green)", color: "black", border: "none" }
-      });
-      setFormData({
-        name: "", email: "", phone: "", artist: "All Artists", eventType: "Club Night", eventDate: "", message: ""
-      });
+      setSubmitting(true);
+      try {
+        const result = await apiPost<{ emailSent?: boolean; warning?: string }>(endpoint, formData);
+        toast.success(successMessage, {
+          style: { background: "var(--brand-green)", color: "black", border: "none" }
+        });
+        if (result?.emailSent === false) {
+          toast.warning(result.warning || "Request saved, but email was not sent. Check mail settings.");
+        }
+        setFormData({
+          name: "", email: "", phone: "", artist: "All Artists", eventType: "Club Night", eventDate: "", message: ""
+        });
+      } catch (error: any) {
+        toast.error(error?.message ?? "Unable to send booking request.");
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -123,9 +144,10 @@ export default function BookingForm() {
       </div>
       <button 
         type="submit" 
-        className="self-start px-8 py-3 bg-[var(--brand-yellow)] text-black font-bebas text-xl rounded-full hover:bg-white transition-colors uppercase tracking-widest mt-2"
+        disabled={submitting}
+        className="self-start px-8 py-3 bg-[var(--brand-yellow)] text-black font-bebas text-xl rounded-full hover:bg-white transition-colors uppercase tracking-widest mt-2 disabled:opacity-50"
       >
-        Send Now
+        {submitting ? "Sending..." : "Send Now"}
       </button>
     </form>
   );

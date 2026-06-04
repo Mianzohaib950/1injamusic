@@ -17,7 +17,7 @@ export async function PUT(
 
   const { id } = await context.params;
   const { status } = await readJson(request);
-  const allowedStatuses = ["Processing", "Shipped", "Delivered", "Pending"];
+  const allowedStatuses = ["Processing", "Shipped", "Delivered", "Pending", "Cancelled"];
   if (!allowedStatuses.includes(status)) {
     return apiError("Invalid order status", 400);
   }

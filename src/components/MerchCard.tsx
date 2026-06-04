@@ -15,9 +15,12 @@ const BADGE_STYLES: Record<string, string> = {
 
 export default function MerchCard({ product, onQuickAdd }: MerchCardProps) {
   const [hovered, setHovered] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const navigate = useNavigate();
 
   const goToDetail = () => navigate(`/shop/${product.id}`);
+  const fallbackImage = `https://picsum.photos/seed/${product.id}-fallback/800/800`;
+  const currentImage = imageFailed ? fallbackImage : hovered ? product.imageHover : product.image;
 
   return (
     <div
@@ -29,8 +32,9 @@ export default function MerchCard({ product, onQuickAdd }: MerchCardProps) {
       {/* Image */}
       <div className="relative aspect-square overflow-hidden bg-[#111]">
         <img
-          src={hovered ? product.imageHover : product.image}
+          src={currentImage}
           alt={product.name}
+          onError={() => setImageFailed(true)}
           className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105"
         />
 

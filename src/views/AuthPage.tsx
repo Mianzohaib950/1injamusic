@@ -6,6 +6,15 @@ import { useAuth } from "@/context/AuthContext";
 
 type Tab = "login" | "signup";
 
+function getStoredRole() {
+  try {
+    const token = localStorage.getItem("1jm_token");
+    return token ? JSON.parse(atob(token.split(".")[1] ?? "")).role : null;
+  } catch {
+    return null;
+  }
+}
+
 function InputField({
   label, type = "text", value, onChange, icon: Icon, placeholder, right
 }: {
@@ -74,7 +83,8 @@ export default function AuthPage() {
       setError(err);
       return;
     }
-    navigate(from, { replace: true });
+    const role = getStoredRole();
+    navigate(role === "admin" ? "/admin" : from, { replace: true });
   };
 
   const handleSignup = async (e: React.FormEvent) => {

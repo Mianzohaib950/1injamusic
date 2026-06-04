@@ -26,10 +26,13 @@ export default function Navigation() {
     { name: "EVENTS & CONTACT", path: "/events" },
     { name: "BOOKING", path: "/booking" },
   ];
+  const visibleNavLinks = user?.role === "admin"
+    ? [...navLinks, { name: "ADMIN", path: "/admin" }]
+    : navLinks;
 
   const handleAccountClick = () => {
     if (isLoggedIn) {
-      navigate("/account");
+      navigate(user?.role === "admin" ? "/admin" : "/account");
     } else {
       navigate("/auth");
     }
@@ -54,7 +57,7 @@ export default function Navigation() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => {
+            {visibleNavLinks.map((link) => {
               const isActive =
                 location.pathname === link.path ||
                 (link.path !== "/" && location.pathname.startsWith(link.path));
@@ -158,7 +161,7 @@ export default function Navigation() {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 bg-black flex flex-col items-center justify-center">
           <div className="flex flex-col items-center gap-8">
-            {navLinks.map((link) => (
+            {visibleNavLinks.map((link) => (
               <Link
                 key={link.name}
                 to={link.path}

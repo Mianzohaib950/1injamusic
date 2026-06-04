@@ -3,30 +3,83 @@ import { motion } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SlidersHorizontal, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { merchProducts, categories } from "@/data/merch";
 import type { MerchProduct } from "@/data/merch";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
+import { apiGet } from "@/lib/api";
 
 gsap.registerPlugin(ScrollTrigger);
 
-const ARTISTS = ["All Artists", "Hintell", "Dark Koko", "Swazz", "Mee$ch"];
 const CATS = ["All", ...categories.map((c) => c.toUpperCase())];
 
+type ProductResponse = Omit<MerchProduct, "category" | "badge"> & {
+  category: string;
+  badge: string | null;
+};
+
+function normalizeProduct(product: ProductResponse): MerchProduct {
+  const normalizedCategory = categories.includes(product.category as (typeof categories)[number])
+    ? (product.category as (typeof categories)[number])
+    : "tee";
+  return {
+    ...product,
+    category: normalizedCategory,
+    badge: product.badge as MerchProduct["badge"],
+    sizes: Array.isArray(product.sizes) && product.sizes.length > 0 ? product.sizes : ["One Size"],
+    imageHover: product.imageHover || product.image,
+  };
+}
+
 export default function ShopPage() {
+  const [searchParams] = useSearchParams();
   const [activeArtist, setActiveArtist] = useState("All Artists");
   const [activeCat, setActiveCat] = useState("All");
   const [quickProduct, setQuickProduct] = useState<MerchProduct | null>(null);
+  const [products, setProducts] = useState<MerchProduct[]>(merchProducts);
   const gridRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
 
-  const filtered = merchProducts.filter((p) => {
+  const artists = ["All Artists", ...Array.from(new Set(products.map((product) => product.artist)))];
+
+  const filtered = products.filter((p) => {
     const artistMatch =
       activeArtist === "All Artists" || p.artist === activeArtist;
     const catMatch =
       activeCat === "All" || p.category.toUpperCase() === activeCat;
     return artistMatch && catMatch;
   });
+
+  useEffect(() => {
+    let active = true;
+    const loadProducts = async () => {
+      try {
+        const rows = await apiGet<ProductResponse[]>("/products");
+        if (active && Array.isArray(rows) && rows.length > 0) {
+          setProducts(rows.map(normalizeProduct));
+        }
+      } catch {
+        // Keep bundled merch as fallback when API is unavailable.
+      }
+    };
+    loadProducts();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const artistFromQuery = searchParams.get("artist");
+    const categoryFromQuery = searchParams.get("category");
+
+    if (artistFromQuery) {
+      setActiveArtist(artistFromQuery);
+    }
+    if (categoryFromQuery) {
+      setActiveCat(categoryFromQuery.toUpperCase());
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -117,7 +170,7 @@ export default function ShopPage() {
 
           {/* Artist select */}
           <div className="flex items-center gap-2 flex-wrap">
-            {ARTISTS.map((a) => (
+            {artists.map((a) => (
               <button
                 key={a}
                 onClick={() => setActiveArtist(a)}

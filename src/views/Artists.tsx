@@ -1,6 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import gsap from "gsap";
+import { apiGet } from "@/lib/api";
+import { artistProfiles, type ArtistProfile } from "@/data/artists";
 
 const splitText = (text: string) => {
   return text.split("").map((char, index) => (
@@ -12,6 +14,7 @@ const splitText = (text: string) => {
 
 export default function Artists() {
   const heroRef = useRef<HTMLHeadingElement>(null);
+  const [artists, setArtists] = useState<ArtistProfile[]>(artistProfiles);
 
   useEffect(() => {
     const chars = heroRef.current?.querySelectorAll("span");
@@ -27,19 +30,23 @@ export default function Artists() {
     }
   }, []);
 
-  const artistImages: Record<string, string> = {
-    "hintell": "/hintell.jpg",
-    "dark-koko": "/dark-koko.jpg",
-    "meesch": "/meesch.jpg",
-    "swazz": "/swazz.jpg",
-  };
-
-  const artists = [
-    { slug: "hintell", name: "HINTELL", genres: ["Dancehall", "Hip-Hop", "Techno"] },
-    { slug: "dark-koko", name: "DARK KOKO", genres: ["Afrobeats", "Dancehall"] },
-    { slug: "swazz", name: "SWAZZ", genres: ["Dancehall", "Electronic"] },
-    { slug: "meesch", name: "MEE$CH", genres: ["Hip-Hop", "Trap"] },
-  ];
+  useEffect(() => {
+    let active = true;
+    const loadArtists = async () => {
+      try {
+        const rows = await apiGet<ArtistProfile[]>("/artists");
+        if (active && Array.isArray(rows) && rows.length > 0) {
+          setArtists(rows);
+        }
+      } catch {
+        // Keep bundled artists as fallback when API is unavailable.
+      }
+    };
+    loadArtists();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <main className="w-full bg-[var(--brand-black)] min-h-screen pt-32 pb-24 px-6 md:px-12">
@@ -62,8 +69,8 @@ export default function Artists() {
               className="group relative block aspect-[16/10] overflow-hidden border border-[var(--brand-border)]"
             >
               <div 
-                className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105 brightness-50"
-                style={{ backgroundImage: `url('${artistImages[artist.slug] ?? `https://picsum.photos/seed/${artist.slug}-landscape/800/500`}')` }}
+                className={`absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105 brightness-50 ${artist.image ? "" : "bg-[#101010]"}`}
+                style={artist.image ? { backgroundImage: `url('${artist.image}')` } : undefined}
               />
               
               <div className="absolute inset-0 bg-black/40 group-hover:bg-black/70 transition-colors duration-500" />

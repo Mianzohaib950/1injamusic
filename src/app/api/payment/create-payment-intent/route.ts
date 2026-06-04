@@ -4,6 +4,7 @@ import { getDb, orderItems, orders, products } from "@/lib/server/db";
 import { requireAuth } from "@/lib/server/auth";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { getStripe } from "@/lib/server/stripe";
+import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { merchProducts } from "@/data/merch";
 
 export const runtime = "nodejs";
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
   try {
     const auth = requireAuth(request);
     if (auth instanceof Response) return auth;
+    await ensureServerSchema();
 
     const { items, shippingAddress } = await readJson(request);
     if (!Array.isArray(items) || items.length === 0) {

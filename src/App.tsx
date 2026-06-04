@@ -28,6 +28,7 @@ import CheckoutPage from "@/views/CheckoutPage";
 import OrderConfirmation from "@/views/OrderConfirmation";
 import AuthPage from "@/views/AuthPage";
 import AccountPage from "@/views/AccountPage";
+import AdminPage from "@/views/AdminPage";
 import NotFound from "@/views/not-found";
 
 const queryClient = new QueryClient();
@@ -62,6 +63,8 @@ function App() {
                   <Route path="/order-confirmation" element={<OrderConfirmation />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/account" element={<AccountPage />} />
+                  <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/admin/:section" element={<AdminPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AnimatePresence>

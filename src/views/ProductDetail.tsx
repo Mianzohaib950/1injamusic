@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, ShoppingBag, ChevronRight, Minus, Plus, Share2, Heart } from "lucide-react";
+import { ShoppingBag, ChevronRight, Minus, Plus, Share2, Heart } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { getProductById, getProductsByArtist, merchProducts } from "@/data/merch";
+import { merchProducts } from "@/data/merch";
 import type { MerchProduct } from "@/data/merch";
 import { useCart } from "@/context/CartContext";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
+import { apiGet } from "@/lib/api";
+import { toast } from "sonner";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -31,29 +33,61 @@ export default function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
-
-  const product = getProductById(productId ?? "");
+  const [products, setProducts] = useState<MerchProduct[]>(merchProducts);
+  const product = products.find((item) => item.id === (productId ?? ""));
   const [activeImg, setActiveImg] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [sizeError, setSizeError] = useState(false);
   const [added, setAdded] = useState(false);
   const [quickProduct, setQuickProduct] = useState<MerchProduct | null>(null);
+  const [mainImageFailed, setMainImageFailed] = useState(false);
+  const [wishlistActive, setWishlistActive] = useState(false);
 
   const heroRef = useRef<HTMLDivElement>(null);
   const relatedRef = useRef<HTMLDivElement>(null);
 
   const images = product ? [product.image, product.imageHover] : [];
+  const fallbackImage = product ? `https://picsum.photos/seed/${product.id}-detail/1200/1200` : "";
 
   // related = same artist, exclude self, max 4
   const related = product
-    ? getProductsByArtist(product.artistSlug)
+    ? products
+        .filter((item) => item.artistSlug === product.artistSlug)
         .filter((p) => p.id !== product.id)
         .slice(0, 4)
     : [];
 
   useEffect(() => {
+    let active = true;
+    const normalizeProduct = (item: any): MerchProduct => ({
+      ...item,
+      category: item.category || "tee",
+      badge: (item.badge ?? null) as MerchProduct["badge"],
+      sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ["One Size"],
+      imageHover: item.imageHover || item.image,
+    });
+
+    const loadProducts = async () => {
+      try {
+        const rows = await apiGet<any[]>("/products");
+        if (active && Array.isArray(rows) && rows.length > 0) {
+          setProducts(rows.map(normalizeProduct));
+        }
+      } catch {
+        // Keep bundled merch as fallback when API is unavailable.
+      }
+    };
+
+    loadProducts();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     setActiveImg(0);
+    setMainImageFailed(false);
     setSelectedSize("");
     setQuantity(1);
     setSizeError(false);
@@ -115,6 +149,29 @@ export default function ProductDetail() {
     setTimeout(() => setAdded(false), 2200);
   };
 
+  const handleWishlist = () => {
+    setWishlistActive((value) => !value);
+    toast.success(wishlistActive ? "Removed from wishlist" : "Added to wishlist");
+  };
+
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/shop/${product.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: product.name,
+          text: `${product.artist} - ${product.name}`,
+          url: shareUrl,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Product link copied");
+    } catch {
+      toast.error("Unable to share right now");
+    }
+  };
+
   return (
     <main className="w-full min-h-screen bg-[var(--brand-black)]">
       <QuickAddModal product={quickProduct} onClose={() => setQuickProduct(null)} />
@@ -127,7 +184,7 @@ export default function ProductDetail() {
           <Link to="/shop" className="hover:text-[var(--brand-yellow)] transition-colors">Shop</Link>
           <ChevronRight size={14} />
           <Link
-            to={`/shop?artist=${product.artistSlug}`}
+            to={`/shop?artist=${encodeURIComponent(product.artist)}`}
             className="hover:text-[var(--brand-yellow)] transition-colors"
           >
             {product.artist}
@@ -152,8 +209,9 @@ export default function ProductDetail() {
               className="relative aspect-square bg-[#111] border border-[#222] overflow-hidden"
             >
               <img
-                src={images[activeImg]}
+                src={mainImageFailed ? fallbackImage : (images[activeImg] || fallbackImage)}
                 alt={product.name}
+                onError={() => setMainImageFailed(true)}
                 className="w-full h-full object-cover"
               />
               {product.badge && (
@@ -175,7 +233,7 @@ export default function ProductDetail() {
                       : "border-[#222] hover:border-[#444]"
                   }`}
                 >
-                  <img src={src} alt={`View ${i + 1}`} className="w-full h-full object-cover" />
+                  <img src={src} alt={`View ${i + 1}`} onError={() => setMainImageFailed(true)} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
@@ -278,16 +336,16 @@ export default function ProductDetail() {
                 }`}
               >
                 <ShoppingBag size={20} />
-                {added ? "ADDED TO CART!" : `ADD TO CART — $${(product.price * quantity).toFixed(2)}`}
+                {added ? "ADDED TO CART!" : `ADD TO CART - $${(product.price * quantity).toFixed(2)}`}
               </button>
             </div>
 
             {/* Share / Wishlist */}
             <div className="pd-reveal flex items-center gap-4">
-              <button className="flex items-center gap-2 text-[var(--brand-gray)] hover:text-[var(--brand-yellow)] font-sans text-sm transition-colors">
+              <button onClick={handleWishlist} className={`flex items-center gap-2 font-sans text-sm transition-colors ${wishlistActive ? "text-[var(--brand-yellow)]" : "text-[var(--brand-gray)] hover:text-[var(--brand-yellow)]"}`}>
                 <Heart size={16} /> Wishlist
               </button>
-              <button className="flex items-center gap-2 text-[var(--brand-gray)] hover:text-[var(--brand-yellow)] font-sans text-sm transition-colors">
+              <button onClick={handleShare} className="flex items-center gap-2 text-[var(--brand-gray)] hover:text-[var(--brand-yellow)] font-sans text-sm transition-colors">
                 <Share2 size={16} /> Share
               </button>
             </div>
