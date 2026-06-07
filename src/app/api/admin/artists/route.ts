@@ -4,6 +4,7 @@ import { requireAdminAuth } from "@/lib/server/admin";
 import { seedArtists } from "@/lib/server/artistSeed";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
+import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 
 export const runtime = "nodejs";
 
@@ -46,8 +47,13 @@ export async function POST(request: Request) {
       return apiError("Slug, name, and image URL are required", 400);
     }
 
-    await getDb().insert(artists).values(item);
-    return json(item, { status: 201 });
+    const resolvedItem = {
+      ...item,
+      image: await uploadImageIfNeeded(item.image, "artists/profile"),
+    };
+
+    await getDb().insert(artists).values(resolvedItem);
+    return json(resolvedItem, { status: 201 });
   } catch (error) {
     return serverError(error);
   }

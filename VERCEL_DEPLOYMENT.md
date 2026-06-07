@@ -28,6 +28,9 @@ JWT_SECRET
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_STORAGE_BUCKET
 ```
 
 Environment variable plan (core):
@@ -38,6 +41,9 @@ JWT_SECRET                           Long random secret for login tokens.
 STRIPE_SECRET_KEY                    Stripe secret key from the same Stripe mode you are deploying.
 STRIPE_WEBHOOK_SECRET                Stripe webhook signing secret for https://YOUR_DOMAIN/api/payment/webhook.
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY   Stripe publishable key from the same Stripe mode as STRIPE_SECRET_KEY.
+SUPABASE_URL                         Supabase project URL (used for Storage uploads from admin panel).
+SUPABASE_SERVICE_ROLE_KEY            Supabase service role key (server-side only).
+SUPABASE_STORAGE_BUCKET              Bucket name for uploaded admin images (example: media).
 NEXT_PUBLIC_API_BASE_URL             Leave unset on Vercel when this same app hosts /api.
 PASSWORD_RESET_TOKEN_EXPIRES_IN_MINUTES  Optional. Example: 10.
 ```
@@ -106,3 +112,4 @@ Post-deploy troubleshooting:
 1. `500` on auth endpoints: check `DATABASE_URL` and database network access.
 2. Booking/event emails not sending: verify SMTP or Resend keys and sender email verification.
 3. Stripe errors: check key mode mismatch (test/live) and webhook secret value.
+4. Images staying as base64 in DB: verify `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET`.

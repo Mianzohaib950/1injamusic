@@ -1,9 +1,15 @@
-import { useRef } from "react";
+import { useEffect, useState } from "react";
 import BookingForm from "@/components/BookingForm";
 import { Link } from "react-router-dom";
+import { apiGet } from "@/lib/api";
 
 export default function Booking() {
   const artists = ["hintell", "dark-koko", "swazz", "meesch"];
+  const [heroTitle, setHeroTitle] = useState("BOOK AN ARTIST");
+  const [heroBody, setHeroBody] = useState("From club nights to international festivals we make it happen.");
+  const [heroImage, setHeroImage] = useState("/booking-banner.jpg");
+  const [contentTitle, setContentTitle] = useState("BOOKING REQUEST");
+  const [contentImage, setContentImage] = useState("");
 
   const faqs = [
     {
@@ -28,6 +34,30 @@ export default function Booking() {
     }
   ];
 
+  useEffect(() => {
+    let active = true;
+    const loadCms = async () => {
+      try {
+        const data = await apiGet<any>("/cms/booking");
+        if (!active) return;
+        const sections = Array.isArray(data?.sections) ? data.sections : [];
+        const hero = sections.find((section: any) => section.sectionKey === "hero");
+        const content = sections.find((section: any) => section.sectionKey === "content");
+        setHeroTitle(String(hero?.title || "BOOK AN ARTIST"));
+        setHeroBody(String(hero?.body || "From club nights to international festivals we make it happen."));
+        setHeroImage(String(hero?.imageUrl || "/booking-banner.jpg"));
+        setContentTitle(String(content?.title || "BOOKING REQUEST"));
+        setContentImage(String(content?.imageUrl || ""));
+      } catch {
+        // Keep static fallback content.
+      }
+    };
+    loadCms();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <main className="w-full bg-[var(--brand-black)] min-h-screen">
       
@@ -35,14 +65,14 @@ export default function Booking() {
       <section className="relative pt-48 pb-24 px-6 md:px-12 border-b border-[var(--brand-border)] overflow-hidden">
         <div 
           className="absolute inset-0 z-0 bg-cover bg-center brightness-[0.25]"
-          style={{ backgroundImage: `url('/booking-banner.jpg')` }}
+          style={{ backgroundImage: `url('${heroImage}')` }}
         />
         <div className="relative z-10 max-w-7xl mx-auto text-center">
           <h1 className="text-white text-7xl md:text-[8rem] font-bebas leading-none mb-6 text-[var(--brand-yellow)]">
-            BOOK AN ARTIST
+            {heroTitle}
           </h1>
           <p className="text-[var(--brand-white)] font-sans text-2xl max-w-3xl mx-auto">
-            From club nights to international festivals we make it happen.
+            {heroBody}
           </p>
         </div>
       </section>
@@ -82,11 +112,18 @@ export default function Booking() {
       </section>
 
       {/* MAIN FORM & ARTISTS */}
-      <section className="py-24 px-6 md:px-12 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16">
+      <section className="relative py-24 px-6 md:px-12 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 overflow-hidden">
+        {contentImage && (
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center opacity-12 brightness-50"
+            style={{ backgroundImage: `url('${contentImage}')` }}
+          />
+        )}
+        <div className="absolute inset-0 z-0 bg-black/50" />
         
-        <div className="lg:col-span-7">
+        <div className="lg:col-span-7 relative z-10">
           <div className="mb-12">
-            <span className="inline-block text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest mb-4">BOOKING REQUEST</span>
+            <span className="inline-block text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest mb-4">{contentTitle}</span>
             <p className="text-[var(--brand-gray)] font-sans">All fields are required. Please provide as much detail as possible about your event.</p>
           </div>
           <div className="bg-[var(--brand-card)] p-8 md:p-10 border border-[var(--brand-border)] rounded-xl shadow-2xl">
@@ -94,7 +131,7 @@ export default function Booking() {
           </div>
         </div>
 
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-5 relative z-10">
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest mb-8">WHO YOU CAN BOOK</span>
           <div className="flex flex-col gap-4">
             {artists.map((artist) => (

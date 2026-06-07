@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Globe, Mail, FileMusic, ArrowRight } from "lucide-react";
 import gsap from "gsap";
 import BookingForm from "@/components/BookingForm";
 import { ALL_EVENTS } from "@/data/events";
+import { apiGet } from "@/lib/api";
 
 const splitText = (text: string) => {
   return text.split("").map((char, index) => (
@@ -13,11 +14,42 @@ const splitText = (text: string) => {
   ));
 };
 
-const TAGS = ["ALL", "festival", "livestream", "djset", "studio", "event"];
+const normalizeHeroTitle = (value: unknown) => {
+  if (typeof value !== "string") return "EVENTS & CONTACT";
+  const clean = value.trim().replace(/\s+/g, " ");
+  return clean || "EVENTS & CONTACT";
+};
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+type CmsEventCard = {
+  id: string;
+  slug: string;
+  linkUrl: string;
+  name: string;
+  tag: string;
+  date: string;
+  image: string;
+};
+
+const slugFromEventLink = (value: string) => {
+  const match = value.trim().match(/^\/events\/([^/?#]+)/i);
+  return match ? match[1] : "";
+};
 
 export default function Events() {
   const heroRef = useRef<HTMLHeadingElement>(null);
-  const [activeTag, setActiveTag] = useState("ALL");
+  const [activeTag, setActiveTag] = useState("all");
+  const [heroTitle, setHeroTitle] = useState("EVENTS & CONTACT");
+  const [heroImage, setHeroImage] = useState("/events-banner.jpg");
+  const [contentTitle, setContentTitle] = useState("UPCOMING & PAST EVENTS");
+  const [contentImage, setContentImage] = useState("");
+  const [cmsCards, setCmsCards] = useState<CmsEventCard[]>([]);
 
   useEffect(() => {
     const chars = heroRef.current?.querySelectorAll("span");
@@ -33,29 +65,123 @@ export default function Events() {
     }
   }, []);
 
-  const filteredEvents = activeTag === "ALL" 
-    ? ALL_EVENTS 
-    : ALL_EVENTS.filter(e => e.tag === activeTag);
+  useEffect(() => {
+    let active = true;
+    const loadCms = async () => {
+      try {
+        const data = await apiGet<any>("/cms/events");
+        if (!active) return;
+        const sections = Array.isArray(data?.sections) ? data.sections : [];
+        const hero = sections.find((section: any) => section.sectionKey === "hero");
+        const content = sections.find((section: any) => section.sectionKey === "content");
+        setHeroTitle(normalizeHeroTitle(hero?.title));
+        setHeroImage(String(hero?.imageUrl || "/events-banner.jpg"));
+        setContentTitle(String(content?.title || "UPCOMING & PAST EVENTS"));
+        setContentImage(String(content?.imageUrl || ""));
+
+        const items = Array.isArray(content?.items) ? content.items : [];
+        const nextCards: CmsEventCard[] = items
+          .filter((item: any) => item && item.active !== false)
+          .map((item: any) => {
+            const tags = Array.isArray(item.tags) ? item.tags.map((tag: any) => String(tag).toLowerCase()).filter(Boolean) : [];
+            const primaryTag = tags[0] ?? "event";
+            const itemTitle = String(item.title ?? "").trim();
+            const linkUrl = String(item.linkUrl ?? "").trim();
+            const slugFromLink = slugFromEventLink(linkUrl);
+            const itemSlug = String(item.itemKey ?? "").trim() || slugFromLink || slugify(itemTitle || "event");
+            return {
+              id: String(item.id ?? itemSlug),
+              slug: itemSlug,
+              linkUrl,
+              name: itemTitle || "UNTITLED EVENT",
+              tag: primaryTag,
+              date: String(item.subtitle ?? "").trim() || "TBA",
+              image: String(item.imageUrl ?? "").trim() || "/events-banner.jpg",
+            };
+          });
+        setCmsCards(nextCards);
+      } catch {
+        // Keep static fallback content.
+      }
+    };
+    loadCms();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const listEvents = useMemo(() => {
+    const defaults = ALL_EVENTS.map((event) => ({
+      id: String(event.id),
+      slug: event.slug,
+      linkUrl: `/events/${event.slug}`,
+      name: event.name,
+      tag: event.tag,
+      date: event.date,
+      image: event.image,
+    }));
+    if (cmsCards.length === 0) return defaults;
+
+    const mergedBySlug = new Map(defaults.map((event) => [event.slug, event]));
+    const appended: typeof defaults = [];
+
+    for (const cmsCard of cmsCards) {
+      if (mergedBySlug.has(cmsCard.slug)) {
+        const base = mergedBySlug.get(cmsCard.slug)!;
+        mergedBySlug.set(cmsCard.slug, {
+          ...base,
+          ...cmsCard,
+          linkUrl: cmsCard.linkUrl || base.linkUrl,
+        });
+      } else {
+        appended.push(cmsCard);
+      }
+    }
+
+    return [...Array.from(mergedBySlug.values()), ...appended];
+  }, [cmsCards]);
+
+  const tags = useMemo(() => {
+    const dynamicTags = Array.from(new Set(listEvents.map((event) => event.tag.toLowerCase())));
+    return ["ALL", ...dynamicTags];
+  }, [listEvents]);
+
+  const knownDetailSlugs = useMemo(() => new Set(ALL_EVENTS.map((event) => event.slug)), []);
+
+  const filteredEvents = activeTag === "all"
+    ? listEvents
+    : listEvents.filter((event) => event.tag.toLowerCase() === activeTag);
 
   return (
     <main className="w-full bg-[var(--brand-black)] min-h-screen">
       
       {/* HERO */}
-      <section className="relative h-[60vh] w-full flex items-center justify-center border-b border-[var(--brand-border)]">
+      <section className="relative min-h-[58vh] md:min-h-[62vh] w-full flex items-center justify-center border-b border-[var(--brand-border)] pt-24 md:pt-28 pb-10">
         <div 
           className="absolute inset-0 z-0 bg-cover bg-center brightness-50 opacity-50"
-          style={{ backgroundImage: `url('/events-banner.jpg')` }}
+          style={{ backgroundImage: `url('${heroImage}')` }}
         />
         
-        <div className="relative z-10 text-center px-6 mt-16">
-          <h1 ref={heroRef} className="text-white text-6xl md:text-8xl lg:text-[10rem] font-bebas leading-none drop-shadow-2xl">
-            {splitText("EVENTS & CONTACT")}
+        <div className="relative z-10 text-center px-6 md:px-10 max-w-7xl mx-auto">
+          <h1
+            ref={heroRef}
+            className="text-white font-bebas leading-[0.92] drop-shadow-2xl text-[clamp(3rem,10vw,8.5rem)] break-words"
+          >
+            {splitText(heroTitle.toUpperCase())}
           </h1>
         </div>
       </section>
 
       {/* CONTACT CATEGORIES */}
-      <section className="py-24 px-6 md:px-12 max-w-7xl mx-auto border-b border-[var(--brand-border)]">
+      <section className="relative py-24 px-6 md:px-12 max-w-7xl mx-auto border-b border-[var(--brand-border)] overflow-hidden">
+        {contentImage && (
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center opacity-15 brightness-50"
+            style={{ backgroundImage: `url('${contentImage}')` }}
+          />
+        )}
+        <div className="absolute inset-0 z-0 bg-black/55" />
+        <div className="relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
           
           <div className="flex flex-col items-center text-center p-8 bg-[var(--brand-card)] border border-[var(--brand-border)] hover:border-[var(--brand-yellow)] transition-colors group">
@@ -80,20 +206,21 @@ export default function Events() {
           </div>
 
         </div>
+        </div>
       </section>
 
       {/* EVENT LIST */}
       <section className="py-24 px-6 md:px-12 max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
-          <span className="inline-block text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest">UPCOMING & PAST EVENTS</span>
+          <span className="inline-block text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest">{contentTitle}</span>
           
           <div className="flex flex-wrap justify-center gap-2">
-            {TAGS.map(tag => (
+            {tags.map(tag => (
               <button
                 key={tag}
-                onClick={() => setActiveTag(tag)}
+                onClick={() => setActiveTag(tag.toLowerCase())}
                 className={`font-bebas px-4 py-1 text-lg tracking-widest rounded-full border-2 transition-colors ${
-                  activeTag === tag 
+                  activeTag === tag.toLowerCase()
                     ? "bg-[var(--brand-yellow)] text-black border-[var(--brand-yellow)]" 
                     : "text-white border-[var(--brand-border)] hover:border-[var(--brand-yellow)]"
                 }`}
@@ -108,7 +235,10 @@ export default function Events() {
           {filteredEvents.map((event) => (
             <Link
               key={event.id}
-              to={`/events/${event.slug}`}
+              to={
+                event.linkUrl ||
+                (knownDetailSlugs.has(event.slug) ? `/events/${event.slug}` : "#")
+              }
               className="bg-[var(--brand-card)] border border-[var(--brand-border)] overflow-hidden group hover:border-[var(--brand-yellow)] transition-colors"
             >
               <div className="aspect-video relative overflow-hidden">

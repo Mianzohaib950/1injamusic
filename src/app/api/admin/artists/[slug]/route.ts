@@ -3,6 +3,7 @@ import { getDb, artists } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, noContent, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
+import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 
 export const runtime = "nodejs";
 
@@ -35,11 +36,12 @@ export async function PUT(
 
     const { slug } = await context.params;
     const body = await readJson(request);
+    const resolvedImage = body.image == null ? undefined : await uploadImageIfNeeded(body.image, "artists/profile");
     const patch = {
       name: body.name,
       genres: Array.isArray(body.genres) ? body.genres : undefined,
       bio: body.bio,
-      image: body.image,
+      image: resolvedImage,
       bookingEmail: body.bookingEmail,
       active: body.active == null ? undefined : Boolean(body.active),
       sortOrder: body.sortOrder == null ? undefined : Number(body.sortOrder),

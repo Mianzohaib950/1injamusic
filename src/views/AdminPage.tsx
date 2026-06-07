@@ -4,6 +4,7 @@ import {
   BarChart3,
   CalendarCheck,
   ContactRound,
+  Layers,
   Mic2,
   Package,
   Save,
@@ -16,6 +17,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 
 type AdminSection =
   | "dashboard"
+  | "cms"
   | "products"
   | "artists"
   | "orders"
@@ -25,6 +27,7 @@ type AdminSection =
 
 const sections: { id: AdminSection; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+  { id: "cms", label: "CMS", icon: Layers },
   { id: "products", label: "Products", icon: Package },
   { id: "artists", label: "Artists", icon: Mic2 },
   { id: "orders", label: "Orders", icon: ShoppingCart },
@@ -276,6 +279,372 @@ function ArtistsPanel() {
           <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/artists/${row.slug}`); await reload(); }}><Trash2 size={14} /></button>
         </>
       )} />
+    </CrudLayout>
+  );
+}
+
+type CmsItem = {
+  id: string;
+  sectionId: string;
+  itemKey: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  imageUrl: string;
+  videoUrl: string;
+  linkLabel: string;
+  linkUrl: string;
+  tags: string[];
+  sortOrder: number;
+  active: boolean;
+};
+
+type CmsPage = {
+  id: string;
+  pageKey: string;
+  title: string;
+  active: boolean;
+};
+
+type CmsSection = {
+  id: string;
+  pageId: string;
+  sectionKey: string;
+  sectionType: string;
+  title: string;
+  subtitle: string;
+  body: string;
+  imageUrl: string;
+  videoUrl: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  settings: Record<string, unknown>;
+  sortOrder: number;
+  active: boolean;
+  items: CmsItem[];
+};
+
+function CmsPanel() {
+  const protectedPageKeys = new Set(["home", "artists", "shop", "events", "booking"]);
+  const compactActionClass = "inline-flex items-center justify-center gap-1 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-1 text-xs hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
+  const { data: pages, loading: pagesLoading, error: pagesError, reload: reloadPages } = useAdminData<CmsPage[]>("/admin/cms/pages", []);
+  const [selectedPageKey, setSelectedPageKey] = useState("home");
+  const [editingPageId, setEditingPageId] = useState("");
+  const [pageEditTitle, setPageEditTitle] = useState("");
+  const [pageEditActive, setPageEditActive] = useState(true);
+  const { data, loading, error, reload } = useAdminData<CmsSection[]>(`/admin/cms/sections?pageKey=${encodeURIComponent(selectedPageKey)}`, []);
+  const [editingSectionId, setEditingSectionId] = useState("");
+  const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [newPageKey, setNewPageKey] = useState("");
+  const [newPageTitle, setNewPageTitle] = useState("");
+  const [sectionForm, setSectionForm] = useState({
+    sectionKey: "",
+    sectionType: "content",
+    title: "",
+    subtitle: "",
+    body: "",
+    imageUrl: "",
+    videoUrl: "",
+    ctaLabel: "",
+    ctaUrl: "",
+    settingsJson: "{}",
+    sortOrder: 0,
+    active: true,
+  });
+  const [editingItemId, setEditingItemId] = useState("");
+  const [itemForm, setItemForm] = useState({
+    itemKey: "",
+    title: "",
+    subtitle: "",
+    description: "",
+    imageUrl: "",
+    videoUrl: "",
+    linkLabel: "",
+    linkUrl: "",
+    tags: "",
+    sortOrder: 0,
+    active: true,
+  });
+
+  useEffect(() => {
+    if (!selectedPageKey && pages.length > 0) {
+      setSelectedPageKey(pages[0].pageKey);
+    }
+  }, [pages, selectedPageKey]);
+
+  useEffect(() => {
+    if (data.length === 0) return;
+    const hasSelected = data.some((section) => section.id === selectedSectionId);
+    if (hasSelected) return;
+    const preferred = data.find((section) => section.sectionKey === "content") ?? data[0];
+    setSelectedSectionId(preferred.id);
+  }, [data, selectedSectionId]);
+
+  const currentSection = data.find((section) => section.id === selectedSectionId) ?? null;
+  const currentPage = pages.find((page) => page.pageKey === selectedPageKey) ?? null;
+
+  const addPage = async () => {
+    const pageKey = newPageKey.trim().toLowerCase();
+    const title = newPageTitle.trim();
+    if (!pageKey) return;
+    await apiPost("/admin/cms/pages", { pageKey, title: title || pageKey, active: true });
+    setNewPageKey("");
+    setNewPageTitle("");
+    await reloadPages();
+    setSelectedPageKey(pageKey);
+  };
+
+  const startEditPage = (page: CmsPage) => {
+    setEditingPageId(page.id);
+    setPageEditTitle(page.title);
+    setPageEditActive(page.active);
+  };
+
+  const savePage = async () => {
+    if (!editingPageId) return;
+    await apiPut(`/admin/cms/pages/${editingPageId}`, {
+      title: pageEditTitle.trim(),
+      active: pageEditActive,
+    });
+    setEditingPageId("");
+    setPageEditTitle("");
+    setPageEditActive(true);
+    await reloadPages();
+  };
+
+  const deletePage = async (page: CmsPage) => {
+    if (protectedPageKeys.has(page.pageKey)) return;
+    await apiDelete(`/admin/cms/pages/${page.id}`);
+    await reloadPages();
+    if (selectedPageKey === page.pageKey) {
+      setSelectedPageKey("home");
+      setSelectedSectionId("");
+      setEditingSectionId("");
+    }
+  };
+
+  const saveSection = async () => {
+    let settings: Record<string, unknown> = {};
+    try {
+      settings = sectionForm.settingsJson.trim() ? JSON.parse(sectionForm.settingsJson) : {};
+    } catch {
+      settings = {};
+    }
+
+    const payload = {
+      ...sectionForm,
+      settings,
+      sortOrder: Number(sectionForm.sortOrder),
+      pageId: currentPage?.id,
+      pageKey: selectedPageKey,
+    };
+    if (editingSectionId) await apiPut(`/admin/cms/sections/${editingSectionId}`, payload);
+    else await apiPost("/admin/cms/sections", payload);
+    setEditingSectionId("");
+    setSectionForm({
+      sectionKey: "",
+      sectionType: "content",
+      title: "",
+      subtitle: "",
+      body: "",
+      imageUrl: "",
+      videoUrl: "",
+      ctaLabel: "",
+      ctaUrl: "",
+      settingsJson: "{}",
+      sortOrder: 0,
+      active: true,
+    });
+    await reload();
+  };
+
+  const saveItem = async () => {
+    if (!selectedSectionId) return;
+    const payload = {
+      ...itemForm,
+      tags: String(itemForm.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
+      sortOrder: Number(itemForm.sortOrder),
+    };
+    if (editingItemId) await apiPut(`/admin/cms/items/${editingItemId}`, payload);
+    else await apiPost(`/admin/cms/sections/${selectedSectionId}/items`, payload);
+    setEditingItemId("");
+    setItemForm({
+      itemKey: "",
+      title: "",
+      subtitle: "",
+      description: "",
+      imageUrl: "",
+      videoUrl: "",
+      linkLabel: "",
+      linkUrl: "",
+      tags: "",
+      sortOrder: 0,
+      active: true,
+    });
+    await reload();
+  };
+
+  return (
+    <CrudLayout title="CMS" loading={loading || pagesLoading} error={error || pagesError}>
+      <div className={`${panelClass} p-5 mb-6`}>
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_220px_220px_auto] gap-3 items-end">
+          <label className="text-[var(--brand-gray)] font-sans text-sm">
+            Page
+            <select className={`${inputClass} mt-2`} value={selectedPageKey} onChange={(e) => { setSelectedPageKey(e.target.value); setEditingSectionId(""); setSelectedSectionId(""); }}>
+              {pages.map((page) => (
+                <option key={page.id} value={page.pageKey}>{page.title} ({page.pageKey})</option>
+              ))}
+            </select>
+          </label>
+          <input className={inputClass} placeholder="new page key (e.g. home2)" value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
+          <input className={inputClass} placeholder="new page title" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
+          <button className={actionClass} onClick={addPage}><Save size={16} /> ADD PAGE</button>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[620px]">
+            <thead>
+              <tr className="border-b border-[#222]">
+                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">PAGE KEY</th>
+                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">TITLE</th>
+                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">ACTIVE</th>
+                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pages.map((page) => (
+                <tr key={page.id} className="border-b border-[#222]">
+                  <td className="px-3 py-2 text-white font-mono text-xs">{page.pageKey}</td>
+                  <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.title}</td>
+                  <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.active ? "Yes" : "No"}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button className={ghostClass} onClick={() => startEditPage(page)}>EDIT</button>
+                      <button className={ghostClass} disabled={protectedPageKeys.has(page.pageKey)} onClick={async () => deletePage(page)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {pages.length === 0 && (
+                <tr>
+                  <td className="px-3 py-6 text-[var(--brand-gray)] font-bebas text-xl" colSpan={4}>No pages found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {editingPageId && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
+            <input className={inputClass} placeholder="page title" value={pageEditTitle} onChange={(e) => setPageEditTitle(e.target.value)} />
+            <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+              <input type="checkbox" checked={pageEditActive} onChange={(e) => setPageEditActive(e.target.checked)} />
+              Active
+            </label>
+            <button className={actionClass} onClick={savePage}><Save size={16} /> SAVE PAGE</button>
+          </div>
+        )}
+      </div>
+
+      <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
+        <input className={inputClass} placeholder="sectionKey (hero, marquee...)" value={sectionForm.sectionKey} onChange={(e) => setSectionForm({ ...sectionForm, sectionKey: e.target.value })} disabled={!!editingSectionId} />
+        <input className={inputClass} placeholder="sectionType (content, list, gallery...)" value={sectionForm.sectionType} onChange={(e) => setSectionForm({ ...sectionForm, sectionType: e.target.value })} />
+        <input className={inputClass} placeholder="title" value={sectionForm.title} onChange={(e) => setSectionForm({ ...sectionForm, title: e.target.value })} />
+        <input className={inputClass} placeholder="subtitle" value={sectionForm.subtitle} onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })} />
+        <input className={inputClass} placeholder="imageUrl" value={sectionForm.imageUrl} onChange={(e) => setSectionForm({ ...sectionForm, imageUrl: e.target.value })} />
+        <input className={inputClass} placeholder="videoUrl" value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
+        <input className={inputClass} placeholder="ctaLabel" value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
+        <input className={inputClass} placeholder="ctaUrl" value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
+        <input className={inputClass} type="number" placeholder="sortOrder" value={sectionForm.sortOrder} onChange={(e) => setSectionForm({ ...sectionForm, sortOrder: Number(e.target.value) })} />
+        <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+          <input type="checkbox" checked={sectionForm.active} onChange={(e) => setSectionForm({ ...sectionForm, active: e.target.checked })} />
+          Active
+        </label>
+        <textarea className={`${inputClass} md:col-span-2`} placeholder="body" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
+        <textarea className={`${inputClass} md:col-span-2`} placeholder='settings JSON (example: {"line1":"WE COLLABORATE","email":"booking@..."} )' value={sectionForm.settingsJson} onChange={(e) => setSectionForm({ ...sectionForm, settingsJson: e.target.value })} />
+        <button className={actionClass} onClick={saveSection}><Save size={16} /> {editingSectionId ? "UPDATE" : "ADD"} SECTION</button>
+      </div>
+
+      <AdminTable
+        rows={data}
+        columns={["sectionKey", "sectionType", "title", "sortOrder", "active"]}
+        actions={(row) => (
+          <>
+            <button className={compactActionClass} onClick={() => {
+              setEditingSectionId(row.id);
+              setSectionForm({
+                sectionKey: row.sectionKey,
+                sectionType: row.sectionType,
+                title: row.title,
+                subtitle: row.subtitle,
+                body: row.body,
+                imageUrl: row.imageUrl,
+                videoUrl: row.videoUrl,
+                ctaLabel: row.ctaLabel,
+                ctaUrl: row.ctaUrl,
+                settingsJson: JSON.stringify(row.settings ?? {}, null, 2),
+                sortOrder: row.sortOrder ?? 0,
+                active: row.active ?? true,
+              });
+              setSelectedSectionId(row.id);
+            }}>EDIT</button>
+            <button className={compactActionClass} onClick={() => setSelectedSectionId(row.id)}>ITEMS</button>
+            <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/sections/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
+          </>
+        )}
+      />
+
+      <div className={`${panelClass} p-5 mt-6`}>
+        <h3 className="text-white font-bebas text-3xl mb-4">SECTION ITEMS {currentSection ? `(${currentSection.sectionKey})` : ""}</h3>
+        {!currentSection && <p className="text-[var(--brand-gray)] font-sans">Select a section to manage its items.</p>}
+        {currentSection && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+              <input className={inputClass} placeholder="itemKey" value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
+              <input className={inputClass} placeholder="title" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
+              <input className={inputClass} placeholder="subtitle" value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
+              <input className={inputClass} placeholder="imageUrl" value={itemForm.imageUrl} onChange={(e) => setItemForm({ ...itemForm, imageUrl: e.target.value })} />
+              <input className={inputClass} placeholder="videoUrl" value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
+              <input className={inputClass} placeholder="linkLabel" value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
+              <input className={inputClass} placeholder="linkUrl" value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
+              <input className={inputClass} placeholder="tags (comma separated)" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
+              <input className={inputClass} type="number" placeholder="sortOrder" value={itemForm.sortOrder} onChange={(e) => setItemForm({ ...itemForm, sortOrder: Number(e.target.value) })} />
+              <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+                <input type="checkbox" checked={itemForm.active} onChange={(e) => setItemForm({ ...itemForm, active: e.target.checked })} />
+                Active
+              </label>
+              <textarea className={`${inputClass} md:col-span-2`} placeholder="description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
+              <button className={actionClass} onClick={saveItem}><Save size={16} /> {editingItemId ? "UPDATE" : "ADD"} ITEM</button>
+            </div>
+
+            <AdminTable
+              rows={currentSection.items ?? []}
+              columns={["itemKey", "title", "sortOrder", "active"]}
+              actions={(row) => (
+                <>
+                  <button className={compactActionClass} onClick={() => {
+                    setEditingItemId(row.id);
+                    setItemForm({
+                      itemKey: row.itemKey ?? "",
+                      title: row.title ?? "",
+                      subtitle: row.subtitle ?? "",
+                      description: row.description ?? "",
+                      imageUrl: row.imageUrl ?? "",
+                      videoUrl: row.videoUrl ?? "",
+                      linkLabel: row.linkLabel ?? "",
+                      linkUrl: row.linkUrl ?? "",
+                      tags: Array.isArray(row.tags) ? row.tags.join(",") : "",
+                      sortOrder: row.sortOrder ?? 0,
+                      active: row.active ?? true,
+                    });
+                  }}>EDIT</button>
+                  <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/items/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
+                </>
+              )}
+            />
+          </>
+        )}
+      </div>
     </CrudLayout>
   );
 }
@@ -584,22 +953,30 @@ function SimpleForm({ fields, form, setForm, onSave, saveLabel, disabledId }: { 
 function AdminTable({ rows, columns, actions }: { rows: any[]; columns: string[]; actions?: (row: any) => React.ReactNode }) {
   return (
     <div className={`${panelClass} overflow-x-auto`}>
-      <table className="w-full min-w-[720px]">
+      <table className="w-full table-fixed">
         <thead>
           <tr className="border-b border-[#222]">
-            {columns.map((column) => <th key={column} className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-4 py-3">{column.toUpperCase()}</th>)}
-            {actions && <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-4 py-3">ACTIONS</th>}
+            {columns.map((column) => (
+              <th key={column} className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">
+                {column.toUpperCase()}
+              </th>
+            ))}
+            {actions && <th className="w-[190px] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">ACTIONS</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.id ?? row.slug} className="border-b border-[#222]">
               {columns.map((column) => (
-                <td key={column} className="px-4 py-3 text-white font-sans text-sm max-w-[240px] truncate">
+                <td key={column} className="px-3 py-3 text-white font-sans text-sm truncate">
                   {Array.isArray(row[column]) ? row[column].join(", ") : column.toLowerCase().includes("cents") ? money(row[column] ?? 0) : String(row[column] ?? "")}
                 </td>
               ))}
-              {actions && <td className="px-4 py-3"><div className="flex gap-2 items-center">{actions(row)}</div></td>}
+              {actions && (
+                <td className="px-3 py-3 w-[190px]">
+                  <div className="flex gap-2 items-center flex-wrap">{actions(row)}</div>
+                </td>
+              )}
             </tr>
           ))}
           {rows.length === 0 && (
@@ -624,6 +1001,7 @@ export default function AdminPage() {
 
   const content = {
     dashboard: <Dashboard />,
+    cms: <CmsPanel />,
     products: <ProductsPanel />,
     artists: <ArtistsPanel />,
     orders: <OrdersPanel orderId={orderId} />,

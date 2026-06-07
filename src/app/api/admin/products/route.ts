@@ -3,8 +3,17 @@ import { getDb, products } from "@/lib/server/db";
 import { requireAdmin, requireAuth } from "@/lib/server/auth";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
+import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 
 export const runtime = "nodejs";
+
+function slugify(value: string) {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 export async function GET(request: Request) {
   try {
@@ -33,20 +42,25 @@ export async function POST(request: Request) {
 
     const body = await readJson(request);
     const { id, name, artist, artistSlug, category, price, originalPrice, image, imageHover, description, badge, inStock, sizes } = body;
-    if (!id || !name || !artist || !artistSlug || !category || price == null || !image || !description) {
+    if (!name || !artist || !artistSlug || !category || price == null || !image || !description) {
       return apiError("Missing required product fields", 400);
     }
 
+    const resolvedImage = await uploadImageIfNeeded(image, "products/main");
+    const resolvedImageHover = await uploadImageIfNeeded(imageHover || resolvedImage, "products/hover");
+
+    const resolvedId = String(id || slugify(name) || `product-${Date.now()}`);
+
     const item = {
-      id,
+      id: resolvedId,
       name,
       artist,
       artistSlug,
       category,
       price: Number(price),
       originalPrice: originalPrice == null ? null : Number(originalPrice),
-      image,
-      imageHover: imageHover || image,
+      image: resolvedImage,
+      imageHover: resolvedImageHover,
       description,
       badge: badge ?? null,
       inStock: inStock == null ? true : Boolean(inStock),

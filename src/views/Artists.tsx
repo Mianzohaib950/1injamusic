@@ -15,6 +15,10 @@ const splitText = (text: string) => {
 export default function Artists() {
   const heroRef = useRef<HTMLHeadingElement>(null);
   const [artists, setArtists] = useState<ArtistProfile[]>(artistProfiles);
+  const [heroTitle, setHeroTitle] = useState("OUR ARTISTS");
+  const [heroBody, setHeroBody] = useState("Representing the sound of Jamaica to the world.");
+  const [heroImage, setHeroImage] = useState("");
+  const [contentTitle, setContentTitle] = useState("OUR ARTISTS");
 
   useEffect(() => {
     const chars = heroRef.current?.querySelectorAll("span");
@@ -48,17 +52,55 @@ export default function Artists() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const loadCms = async () => {
+      try {
+        const data = await apiGet<any>("/cms/artists");
+        if (!active) return;
+        const sections = Array.isArray(data?.sections) ? data.sections : [];
+        const hero = sections.find((section: any) => section.sectionKey === "hero");
+        const content = sections.find((section: any) => section.sectionKey === "content");
+        setHeroTitle(String(hero?.title || "OUR ARTISTS"));
+        setHeroBody(String(hero?.body || "Representing the sound of Jamaica to the world."));
+        setHeroImage(String(hero?.imageUrl || ""));
+        setContentTitle(String(content?.title || "OUR ARTISTS"));
+      } catch {
+        // Keep static fallback content.
+      }
+    };
+    loadCms();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <main className="w-full bg-[var(--brand-black)] min-h-screen pt-32 pb-24 px-6 md:px-12">
       <div className="max-w-7xl mx-auto">
         
-        <div className="text-center mb-24">
+        <div
+          className="text-center mb-24 py-16 md:py-20 border border-[var(--brand-border)] relative overflow-hidden"
+        >
+          {heroImage && (
+            <div
+              className="absolute inset-0 z-0 bg-cover bg-center brightness-[0.35]"
+              style={{ backgroundImage: `url('${heroImage}')` }}
+            />
+          )}
+          <div className="absolute inset-0 z-0 bg-black/60" />
+          <div className="relative z-10 px-4">
           <h1 ref={heroRef} className="text-white text-7xl md:text-[9rem] font-bebas leading-none mb-6">
-            {splitText("OUR ARTISTS")}
+            {splitText(heroTitle.toUpperCase())}
           </h1>
           <p className="text-[var(--brand-gray)] font-sans text-xl max-w-2xl mx-auto">
-            Representing the sound of Jamaica to the world.
+            {heroBody}
           </p>
+          </div>
+        </div>
+
+        <div className="mb-10">
+          <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{contentTitle}</span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

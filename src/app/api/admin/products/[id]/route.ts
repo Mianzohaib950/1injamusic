@@ -3,6 +3,7 @@ import { getDb, products } from "@/lib/server/db";
 import { requireAdmin, requireAuth } from "@/lib/server/auth";
 import { apiError, json, noContent, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
+import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,10 @@ export async function PUT(
 
     const { id } = await context.params;
     const { name, artist, artistSlug, category, price, originalPrice, image, imageHover, description, badge, inStock, sizes } = await readJson(request);
-    const resolvedImageHover = imageHover === undefined ? undefined : imageHover || image;
+    const resolvedImage = image === undefined ? undefined : await uploadImageIfNeeded(image, "products/main");
+    const resolvedImageHover = imageHover === undefined
+      ? undefined
+      : await uploadImageIfNeeded(imageHover || resolvedImage || image, "products/hover");
     const db = getDb();
     await db
       .update(products)
@@ -52,7 +56,7 @@ export async function PUT(
         category,
         price: price == null ? undefined : Number(price),
         originalPrice: originalPrice == null ? null : Number(originalPrice),
-        image,
+        image: resolvedImage,
         imageHover: resolvedImageHover,
         description,
         badge: badge ?? null,

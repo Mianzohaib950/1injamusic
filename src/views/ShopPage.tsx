@@ -4,7 +4,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SlidersHorizontal, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { merchProducts, categories } from "@/data/merch";
+import { categories } from "@/data/merch";
 import type { MerchProduct } from "@/data/merch";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
@@ -37,7 +37,13 @@ export default function ShopPage() {
   const [activeArtist, setActiveArtist] = useState("All Artists");
   const [activeCat, setActiveCat] = useState("All");
   const [quickProduct, setQuickProduct] = useState<MerchProduct | null>(null);
-  const [products, setProducts] = useState<MerchProduct[]>(merchProducts);
+  const [products, setProducts] = useState<MerchProduct[]>([]);
+  const [heroTitle, setHeroTitle] = useState("OFFICIAL\nMERCH SHOP");
+  const [heroBody, setHeroBody] = useState("Exclusive drops from Hintell, Dark Koko, Swazz & Mee$ch. Represent the movement.");
+  const [heroSubtitle, setHeroSubtitle] = useState("");
+  const [heroImage, setHeroImage] = useState("");
+  const [contentTitle, setContentTitle] = useState("NEW DROPS EVERY MONTH");
+  const [contentBody, setContentBody] = useState("Follow 1 Jamaica Music on Instagram for first access to limited drops and exclusive bundles.");
   const gridRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
 
@@ -56,14 +62,39 @@ export default function ShopPage() {
     const loadProducts = async () => {
       try {
         const rows = await apiGet<ProductResponse[]>("/products");
-        if (active && Array.isArray(rows) && rows.length > 0) {
+        if (active && Array.isArray(rows)) {
           setProducts(rows.map(normalizeProduct));
         }
       } catch {
-        // Keep bundled merch as fallback when API is unavailable.
+        // Keep current in-memory state when API is unavailable.
       }
     };
     loadProducts();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadCms = async () => {
+      try {
+        const data = await apiGet<any>("/cms/shop");
+        if (!active) return;
+        const sections = Array.isArray(data?.sections) ? data.sections : [];
+        const hero = sections.find((section: any) => section.sectionKey === "hero");
+        const content = sections.find((section: any) => section.sectionKey === "content");
+        setHeroTitle(String(hero?.title || "OFFICIAL\nMERCH SHOP"));
+        setHeroSubtitle(String(hero?.subtitle || ""));
+        setHeroBody(String(hero?.body || "Exclusive drops from Hintell, Dark Koko, Swazz & Mee$ch. Represent the movement."));
+        setHeroImage(String(hero?.imageUrl || ""));
+        setContentTitle(String(content?.title || "NEW DROPS EVERY MONTH"));
+        setContentBody(String(content?.body || "Follow 1 Jamaica Music on Instagram for first access to limited drops and exclusive bundles."));
+      } catch {
+        // Keep static fallback content.
+      }
+    };
+    loadCms();
     return () => {
       active = false;
     };
@@ -113,11 +144,27 @@ export default function ShopPage() {
   }, [filtered]);
 
   const splitHero = (text: string) =>
-    text.split("").map((ch, i) => (
-      <span key={i} className="inline-block">
-        {ch === " " ? "\u00A0" : ch}
-      </span>
-    ));
+    text
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word, wordIndex) => (
+        <span key={`${word}-${wordIndex}`} className="inline-block whitespace-nowrap mr-[0.18em]">
+          {word.split("").map((ch, charIndex) => (
+            <span key={`${ch}-${charIndex}`} className="inline-block">
+              {ch}
+            </span>
+          ))}
+        </span>
+      ));
+
+  const cleanHeroTitle = String(heroTitle || "").trim();
+  const heroLines = (() => {
+    const fromNewLine = cleanHeroTitle.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (fromNewLine.length > 0) return fromNewLine;
+    const cleanSubtitle = String(heroSubtitle || "").trim();
+    if (cleanSubtitle) return [cleanHeroTitle, cleanSubtitle].filter(Boolean);
+    return ["OFFICIAL", "MERCH SHOP"];
+  })();
 
   return (
     <main className="w-full bg-[var(--brand-black)] min-h-screen">
@@ -128,6 +175,13 @@ export default function ShopPage() {
         ref={heroRef}
         className="relative pt-40 pb-20 px-6 md:px-12 border-b border-[#222] overflow-hidden"
       >
+        {heroImage && (
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center brightness-[0.28]"
+            style={{ backgroundImage: `url('${heroImage}')` }}
+          />
+        )}
+        <div className="absolute inset-0 z-0 bg-black/60" />
         <div className="absolute inset-0 hero-grid opacity-10 pointer-events-none" />
         <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full blur-[140px] opacity-10 pointer-events-none"
           style={{ background: "radial-gradient(circle, rgba(232,255,0,0.3) 0%, transparent 70%)" }} />
@@ -137,12 +191,15 @@ export default function ShopPage() {
             1 JAMAICA MUSIC
           </span>
           <h1 className="shop-hero-text text-white font-bebas text-7xl md:text-[9rem] leading-none mb-6">
-            {splitHero("OFFICIAL")}
-            <br />
-            {splitHero("MERCH SHOP")}
+            {heroLines.map((line, index) => (
+              <span key={`${line}-${index}`}>
+                {splitHero(line.toUpperCase())}
+                {index < heroLines.length - 1 && <br />}
+              </span>
+            ))}
           </h1>
           <p className="text-[var(--brand-gray)] font-sans text-lg max-w-xl">
-            Exclusive drops from Hintell, Dark Koko, Swazz & Mee$ch. Represent the movement.
+            {heroBody}
           </p>
         </div>
       </section>
@@ -232,10 +289,10 @@ export default function ShopPage() {
       {/* CTA STRIP */}
       <section className="bg-[var(--brand-yellow)] py-16 px-6 md:px-12 text-center">
         <h2 className="text-black font-bebas text-5xl md:text-7xl mb-4">
-          NEW DROPS EVERY MONTH
+          {contentTitle}
         </h2>
         <p className="text-black/70 font-sans text-lg max-w-xl mx-auto">
-          Follow 1 Jamaica Music on Instagram for first access to limited drops and exclusive bundles.
+          {contentBody}
         </p>
       </section>
     </main>
