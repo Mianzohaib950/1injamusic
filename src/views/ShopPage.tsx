@@ -66,7 +66,7 @@ export default function ShopPage() {
           setProducts(rows.map(normalizeProduct));
         }
       } catch {
-        // Keep current in-memory state when API is unavailable.
+        // Keep current list when API is unavailable.
       }
     };
     loadProducts();

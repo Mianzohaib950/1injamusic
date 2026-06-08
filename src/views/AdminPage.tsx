@@ -58,6 +58,10 @@ function capitalizeFirst(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function toDisplayLabel(value: string) {
+  return capitalizeFirst(value.replace(/([a-z])([A-Z])/g, "$1 $2"));
+}
+
 function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
@@ -200,9 +204,13 @@ function ProductsPanel() {
   const { data, loading, error, reload } = useAdminData<any[]>("/admin/products", []);
   const [form, setForm] = useState<any>(blank);
   const [editingId, setEditingId] = useState("");
+  const [imageFileName, setImageFileName] = useState("");
+  const [hoverImageFileName, setHoverImageFileName] = useState("");
 
   const pickImage = (field: "image" | "imageHover", file?: File) => {
     if (!file) return;
+    if (field === "image") setImageFileName(file.name);
+    if (field === "imageHover") setHoverImageFileName(file.name);
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
@@ -221,6 +229,8 @@ function ProductsPanel() {
     if (editingId) await apiPut(`/admin/products/${editingId}`, payload);
     else await apiPost("/admin/products", payload);
     setForm(blank);
+    setImageFileName("");
+    setHoverImageFileName("");
     setEditingId("");
     await reload();
   };
@@ -229,31 +239,43 @@ function ProductsPanel() {
     <CrudLayout title="PRODUCTS" loading={loading} error={error}>
       <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
         {["id", "name", "artist", "artistSlug", "category", "image", "imageHover", "badge", "sizes"].map((key) => (
-          <input key={key} className={inputClass} placeholder={key} value={form[key] ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} disabled={key === "id" && !!editingId} />
+          <input key={key} className={inputClass} placeholder={toDisplayLabel(key)} value={form[key] ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} disabled={key === "id" && !!editingId} />
         ))}
-        <label className="text-[var(--brand-gray)] font-sans text-sm">
+        <div className="text-[var(--brand-gray)] font-sans text-sm">
           Image file
-          <input className={`${inputClass} mt-2`} type="file" accept="image/*" onChange={(e) => pickImage("image", e.target.files?.[0])} />
-        </label>
-        <label className="text-[var(--brand-gray)] font-sans text-sm">
+          <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
+            <span className="text-white text-sm">{imageFileName || "No file selected"}</span>
+            <span className={ghostClass}>Choose</span>
+            <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("image", e.target.files?.[0])} />
+          </label>
+        </div>
+        <div className="text-[var(--brand-gray)] font-sans text-sm">
           Hover image file
-          <input className={`${inputClass} mt-2`} type="file" accept="image/*" onChange={(e) => pickImage("imageHover", e.target.files?.[0])} />
-        </label>
-        <input className={inputClass} placeholder="price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-        <input className={inputClass} placeholder="originalPrice" type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} />
-        <textarea className={`${inputClass} md:col-span-2`} placeholder="description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
+            <span className="text-white text-sm">{hoverImageFileName || "No file selected"}</span>
+            <span className={ghostClass}>Choose</span>
+            <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("imageHover", e.target.files?.[0])} />
+          </label>
+        </div>
+        <input className={inputClass} placeholder="Price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+        <input className={inputClass} placeholder="Original Price" type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} />
+        <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
           <input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />
-          In stock
+          In Stock
         </label>
         <button className={actionClass} onClick={save}><Save size={16} /> {editingId ? "UPDATE" : "ADD"} PRODUCT</button>
       </div>
       <AdminTable
         rows={data}
         columns={["name", "artist", "category", "price", "inStock"]}
+        formatCell={(_, column, value) => {
+          if (column === "inStock") return value ? "In Stock" : "Out Of Stock";
+          return undefined;
+        }}
         actions={(row) => (
           <>
-            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); }}>EDIT</button>
+            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setHoverImageFileName(""); }}>EDIT</button>
             <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/products/${row.id}`); await reload(); }}><Trash2 size={14} /></button>
           </>
         )}
@@ -278,7 +300,7 @@ function ArtistsPanel() {
   return (
     <CrudLayout title="ARTISTS" loading={loading} error={error}>
       <SimpleForm fields={["slug", "name", "genres", "bio", "image", "bookingEmail", "sortOrder"]} form={form} setForm={setForm} onSave={save} saveLabel={editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"} disabledId={!!editingSlug ? "slug" : ""} />
-      <AdminTable rows={data} columns={["name", "slug", "genres", "active"]} actions={(row) => (
+      <AdminTable rows={data} columns={["name", "slug", "genres", "active"]} formatCell={(_, column, value) => column === "active" ? (value ? "Active" : "Inactive") : undefined} actions={(row) => (
         <>
           <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); }}>EDIT</button>
           <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/artists/${row.slug}`); await reload(); }}><Trash2 size={14} /></button>
@@ -352,8 +374,6 @@ function CmsPanel() {
     videoUrl: "",
     ctaLabel: "",
     ctaUrl: "",
-    settingsJson: "{}",
-    sortOrder: 0,
     active: true,
   });
   const [editingItemId, setEditingItemId] = useState("");
@@ -367,7 +387,6 @@ function CmsPanel() {
     linkLabel: "",
     linkUrl: "",
     tags: "",
-    sortOrder: 0,
     active: true,
   });
 
@@ -429,17 +448,11 @@ function CmsPanel() {
   };
 
   const saveSection = async () => {
-    let settings: Record<string, unknown> = {};
-    try {
-      settings = sectionForm.settingsJson.trim() ? JSON.parse(sectionForm.settingsJson) : {};
-    } catch {
-      settings = {};
-    }
-
+    const editingSection = data.find((section) => section.id === editingSectionId);
     const payload = {
       ...sectionForm,
-      settings,
-      sortOrder: Number(sectionForm.sortOrder),
+      settings: editingSection?.settings ?? {},
+      sortOrder: editingSection?.sortOrder ?? data.length + 1,
       pageId: currentPage?.id,
       pageKey: selectedPageKey,
     };
@@ -456,8 +469,6 @@ function CmsPanel() {
       videoUrl: "",
       ctaLabel: "",
       ctaUrl: "",
-      settingsJson: "{}",
-      sortOrder: 0,
       active: true,
     });
     await reload();
@@ -465,10 +476,12 @@ function CmsPanel() {
 
   const saveItem = async () => {
     if (!selectedSectionId) return;
+    const currentItems = currentSection?.items ?? [];
+    const editingItem = currentItems.find((item) => item.id === editingItemId);
     const payload = {
       ...itemForm,
       tags: String(itemForm.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
-      sortOrder: Number(itemForm.sortOrder),
+      sortOrder: editingItem?.sortOrder ?? currentItems.length + 1,
     };
     if (editingItemId) await apiPut(`/admin/cms/items/${editingItemId}`, payload);
     else await apiPost(`/admin/cms/sections/${selectedSectionId}/items`, payload);
@@ -483,7 +496,6 @@ function CmsPanel() {
       linkLabel: "",
       linkUrl: "",
       tags: "",
-      sortOrder: 0,
       active: true,
     });
     await reload();
@@ -497,12 +509,12 @@ function CmsPanel() {
             Page
             <select className={`${inputClass} mt-2`} value={selectedPageKey} onChange={(e) => { setSelectedPageKey(e.target.value); setEditingSectionId(""); setSelectedSectionId(""); }}>
               {pages.map((page) => (
-                <option key={page.id} value={page.pageKey}>{page.title} ({capitalizeFirst(page.pageKey)})</option>
+                <option key={page.id} value={page.pageKey}>{capitalizeFirst(page.pageKey)}</option>
               ))}
             </select>
           </label>
-          <input className={inputClass} placeholder="new page key (e.g. home2)" value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
-          <input className={inputClass} placeholder="new page title" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
+          <input className={inputClass} placeholder="New Page Key" value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
+          <input className={inputClass} placeholder="New Page Title" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
           <button className={actionClass} onClick={addPage}><Save size={16} /> ADD PAGE</button>
         </div>
         <div className="mt-4 overflow-x-auto">
@@ -520,7 +532,7 @@ function CmsPanel() {
                 <tr key={page.id} className="border-b border-[#222]">
                   <td className="px-3 py-2 text-white font-mono text-xs">{capitalizeFirst(page.pageKey)}</td>
                   <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.title}</td>
-                  <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.active ? "Yes" : "No"}</td>
+                  <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.active ? "Active" : "Inactive"}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <button className={ghostClass} onClick={() => startEditPage(page)}>EDIT</button>
@@ -541,7 +553,7 @@ function CmsPanel() {
         </div>
         {editingPageId && (
           <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
-            <input className={inputClass} placeholder="page title" value={pageEditTitle} onChange={(e) => setPageEditTitle(e.target.value)} />
+            <input className={inputClass} placeholder="Page Title" value={pageEditTitle} onChange={(e) => setPageEditTitle(e.target.value)} />
             <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
               <input type="checkbox" checked={pageEditActive} onChange={(e) => setPageEditActive(e.target.checked)} />
               Active
@@ -552,30 +564,31 @@ function CmsPanel() {
       </div>
 
       <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
-        <input className={inputClass} placeholder="sectionKey (hero, marquee...)" value={sectionForm.sectionKey} onChange={(e) => setSectionForm({ ...sectionForm, sectionKey: e.target.value })} disabled={!!editingSectionId} />
-        <input className={inputClass} placeholder="sectionType (content, list, gallery...)" value={sectionForm.sectionType} onChange={(e) => setSectionForm({ ...sectionForm, sectionType: e.target.value })} />
-        <input className={inputClass} placeholder="title" value={sectionForm.title} onChange={(e) => setSectionForm({ ...sectionForm, title: e.target.value })} />
-        <input className={inputClass} placeholder="subtitle" value={sectionForm.subtitle} onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })} />
-        <input className={inputClass} placeholder="imageUrl" value={sectionForm.imageUrl} onChange={(e) => setSectionForm({ ...sectionForm, imageUrl: e.target.value })} />
-        <input className={inputClass} placeholder="videoUrl" value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
-        <input className={inputClass} placeholder="ctaLabel" value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
-        <input className={inputClass} placeholder="ctaUrl" value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
-        <input className={inputClass} type="number" placeholder="sortOrder" value={sectionForm.sortOrder} onChange={(e) => setSectionForm({ ...sectionForm, sortOrder: Number(e.target.value) })} />
+        <input className={inputClass} placeholder="Section Key" value={sectionForm.sectionKey} onChange={(e) => setSectionForm({ ...sectionForm, sectionKey: e.target.value })} disabled={!!editingSectionId} />
+        <input className={inputClass} placeholder="Section Type" value={sectionForm.sectionType} onChange={(e) => setSectionForm({ ...sectionForm, sectionType: e.target.value })} />
+        <input className={inputClass} placeholder="Title" value={sectionForm.title} onChange={(e) => setSectionForm({ ...sectionForm, title: e.target.value })} />
+        <input className={inputClass} placeholder="Subtitle" value={sectionForm.subtitle} onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })} />
+        <input className={inputClass} placeholder="Image URL" value={sectionForm.imageUrl} onChange={(e) => setSectionForm({ ...sectionForm, imageUrl: e.target.value })} />
+        <input className={inputClass} placeholder="Video URL" value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
+        <input className={inputClass} placeholder="CTA Label" value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
+        <input className={inputClass} placeholder="CTA URL" value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
         <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
           <input type="checkbox" checked={sectionForm.active} onChange={(e) => setSectionForm({ ...sectionForm, active: e.target.checked })} />
           Active
         </label>
-        <textarea className={`${inputClass} md:col-span-2`} placeholder="body" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
-        <textarea className={`${inputClass} md:col-span-2`} placeholder='settings JSON (example: {"line1":"WE COLLABORATE","email":"booking@..."} )' value={sectionForm.settingsJson} onChange={(e) => setSectionForm({ ...sectionForm, settingsJson: e.target.value })} />
+        <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
         <button className={actionClass} onClick={saveSection}><Save size={16} /> {editingSectionId ? "UPDATE" : "ADD"} SECTION</button>
       </div>
 
       <AdminTable
         rows={data}
-        columns={["sectionKey", "sectionType", "title", "sortOrder", "active"]}
+        columns={["sectionKey", "sectionType", "title", "active"]}
         formatCell={(row, column, value) => {
           if (column === "sectionKey" || column === "sectionType") {
             return capitalizeFirst(String(value ?? ""));
+          }
+          if (column === "active") {
+            return value ? "Active" : "Inactive";
           }
           return undefined;
         }}
@@ -593,8 +606,6 @@ function CmsPanel() {
                 videoUrl: row.videoUrl,
                 ctaLabel: row.ctaLabel,
                 ctaUrl: row.ctaUrl,
-                settingsJson: JSON.stringify(row.settings ?? {}, null, 2),
-                sortOrder: row.sortOrder ?? 0,
                 active: row.active ?? true,
               });
               setSelectedSectionId(row.id);
@@ -611,26 +622,34 @@ function CmsPanel() {
         {currentSection && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-              <input className={inputClass} placeholder="itemKey" value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
-              <input className={inputClass} placeholder="title" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
-              <input className={inputClass} placeholder="subtitle" value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
-              <input className={inputClass} placeholder="imageUrl" value={itemForm.imageUrl} onChange={(e) => setItemForm({ ...itemForm, imageUrl: e.target.value })} />
-              <input className={inputClass} placeholder="videoUrl" value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
-              <input className={inputClass} placeholder="linkLabel" value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
-              <input className={inputClass} placeholder="linkUrl" value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
-              <input className={inputClass} placeholder="tags (comma separated)" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
-              <input className={inputClass} type="number" placeholder="sortOrder" value={itemForm.sortOrder} onChange={(e) => setItemForm({ ...itemForm, sortOrder: Number(e.target.value) })} />
+              <input className={inputClass} placeholder="Item Key" value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
+              <input className={inputClass} placeholder="Title" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
+              <input className={inputClass} placeholder="Subtitle" value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
+              <input className={inputClass} placeholder="Image URL" value={itemForm.imageUrl} onChange={(e) => setItemForm({ ...itemForm, imageUrl: e.target.value })} />
+              <input className={inputClass} placeholder="Video URL" value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
+              <input className={inputClass} placeholder="Link Label" value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
+              <input className={inputClass} placeholder="Link URL" value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
+              <input className={inputClass} placeholder="Tags (comma separated)" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
               <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
                 <input type="checkbox" checked={itemForm.active} onChange={(e) => setItemForm({ ...itemForm, active: e.target.checked })} />
                 Active
               </label>
-              <textarea className={`${inputClass} md:col-span-2`} placeholder="description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
+              <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
               <button className={actionClass} onClick={saveItem}><Save size={16} /> {editingItemId ? "UPDATE" : "ADD"} ITEM</button>
             </div>
 
             <AdminTable
               rows={currentSection.items ?? []}
-              columns={["itemKey", "title", "sortOrder", "active"]}
+              columns={["itemKey", "title", "active"]}
+              formatCell={(_, column, value) => {
+                if (column === "itemKey") {
+                  return capitalizeFirst(String(value ?? ""));
+                }
+                if (column === "active") {
+                  return value ? "Active" : "Inactive";
+                }
+                return undefined;
+              }}
               actions={(row) => (
                 <>
                   <button className={compactActionClass} onClick={() => {
@@ -645,7 +664,6 @@ function CmsPanel() {
                       linkLabel: row.linkLabel ?? "",
                       linkUrl: row.linkUrl ?? "",
                       tags: Array.isArray(row.tags) ? row.tags.join(",") : "",
-                      sortOrder: row.sortOrder ?? 0,
                       active: row.active ?? true,
                     });
                   }}>EDIT</button>

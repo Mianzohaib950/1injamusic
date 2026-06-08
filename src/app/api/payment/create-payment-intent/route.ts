@@ -5,16 +5,11 @@ import { requireAuth } from "@/lib/server/auth";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { getStripe } from "@/lib/server/stripe";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
-import { merchProducts } from "@/data/merch";
 
 export const runtime = "nodejs";
 
 type Db = ReturnType<typeof getDb>;
 type Product = typeof products.$inferSelect;
-
-function getCatalogProduct(id: string) {
-  return merchProducts.find((product) => product.id === id);
-}
 
 function resolveCartProductId(item: any) {
   const candidates = [
@@ -23,33 +18,11 @@ function resolveCartProductId(item: any) {
     typeof item?.cartKey === "string" ? item.cartKey.split("::")[0] : undefined,
   ].filter((id): id is string => typeof id === "string" && id.length > 0);
 
-  const productById = candidates
-    .map((id) => getCatalogProduct(id))
-    .find(Boolean);
-
-  return productById?.id ?? merchProducts.find((product) => product.name === item?.name)?.id ?? candidates[0] ?? null;
+  return candidates[0] ?? null;
 }
 
 async function getCartProducts(db: Db, productIds: string[]) {
-  let dbProducts = await db.select().from(products).where(inArray(products.id, productIds));
-  const foundIds = new Set(dbProducts.map((product: Product) => product.id));
-  const missingCatalogProducts = productIds
-    .filter((id) => !foundIds.has(id))
-    .map(getCatalogProduct)
-    .filter((product): product is NonNullable<ReturnType<typeof getCatalogProduct>> => Boolean(product));
-
-  if (missingCatalogProducts.length > 0) {
-    await db
-      .insert(products)
-      .values(
-        missingCatalogProducts.map(({ sizes: _sizes, ...product }) => product),
-      )
-      .onConflictDoNothing();
-
-    dbProducts = await db.select().from(products).where(inArray(products.id, productIds));
-  }
-
-  return dbProducts;
+  return db.select().from(products).where(inArray(products.id, productIds));
 }
 
 export async function POST(request: Request) {

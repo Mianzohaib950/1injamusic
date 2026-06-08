@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import { ShoppingBag, ChevronRight, Minus, Plus, Share2, Heart } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { merchProducts } from "@/data/merch";
 import type { MerchProduct } from "@/data/merch";
 import { useCart } from "@/context/CartContext";
 import MerchCard from "@/components/MerchCard";
@@ -33,7 +32,7 @@ export default function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const [products, setProducts] = useState<MerchProduct[]>(merchProducts);
+  const [products, setProducts] = useState<MerchProduct[]>([]);
   const product = products.find((item) => item.id === (productId ?? ""));
   const [activeImg, setActiveImg] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
@@ -71,11 +70,11 @@ export default function ProductDetail() {
     const loadProducts = async () => {
       try {
         const rows = await apiGet<any[]>("/products");
-        if (active && Array.isArray(rows) && rows.length > 0) {
+        if (active && Array.isArray(rows)) {
           setProducts(rows.map(normalizeProduct));
         }
       } catch {
-        // Keep bundled merch as fallback when API is unavailable.
+        // Keep current list if API is unavailable.
       }
     };
 
