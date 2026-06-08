@@ -4,10 +4,18 @@ import { Menu, X, ShoppingBag, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
+import { apiGet } from "@/lib/api";
+
+type CmsNavPage = {
+  pageKey: string;
+  title: string;
+  active: boolean;
+};
 
 export default function Navigation() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [cmsNavLinks, setCmsNavLinks] = useState<Array<{ name: string; path: string }>>([]);
   const location = useLocation();
   const navigate = useNavigate();
   const { totalItems, setCartOpen } = useCart();
@@ -19,13 +27,71 @@ export default function Navigation() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const navLinks = [
+  const fallbackNavLinks = [
     { name: "HOME", path: "/" },
     { name: "ARTISTS", path: "/artists" },
     { name: "SHOP", path: "/shop" },
     { name: "EVENTS & CONTACT", path: "/events" },
     { name: "BOOKING", path: "/booking" },
   ];
+
+  useEffect(() => {
+    let active = true;
+    const loadNav = async () => {
+      try {
+        const rows = await apiGet<CmsNavPage[]>("/cms/pages");
+        if (!active || !Array.isArray(rows) || rows.length === 0) return;
+
+        const order: Record<string, number> = {
+          home: 1,
+          artists: 2,
+          shop: 3,
+          events: 4,
+          booking: 5,
+        };
+
+        const labelFromTitle = (title: string, pageKey: string) => {
+          const clean = String(title ?? "").trim();
+          const base = clean.replace(/\s*page\s*$/i, "") || pageKey;
+          return base.toUpperCase();
+        };
+
+        const pathFromPageKey = (pageKey: string) => {
+          const key = pageKey.toLowerCase();
+          if (key === "home") return "/";
+          return `/${key}`;
+        };
+
+        const links = rows
+          .map((page) => ({
+            key: String(page.pageKey ?? "").toLowerCase(),
+            name: labelFromTitle(String(page.title ?? ""), String(page.pageKey ?? "")),
+            path: pathFromPageKey(String(page.pageKey ?? "")),
+          }))
+          .filter((link) => link.key && link.key !== "admin")
+          .sort((a, b) => {
+            const aOrder = order[a.key] ?? 999;
+            const bOrder = order[b.key] ?? 999;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            return a.name.localeCompare(b.name);
+          })
+          .map(({ name, path }) => ({ name, path }));
+
+        if (links.length > 0) {
+          setCmsNavLinks(links);
+        }
+      } catch {
+        // Keep fallback nav links when CMS pages are unavailable.
+      }
+    };
+
+    loadNav();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const navLinks = cmsNavLinks.length > 0 ? cmsNavLinks : fallbackNavLinks;
   const visibleNavLinks = user?.role === "admin"
     ? [...navLinks, { name: "ADMIN", path: "/admin" }]
     : navLinks;

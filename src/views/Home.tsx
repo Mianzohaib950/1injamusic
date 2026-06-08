@@ -9,7 +9,7 @@ gsap.registerPlugin(ScrollTrigger);
 
 const splitText = (text: string) => {
   return text.split("").map((char, index) => (
-    <span key={index} className="inline-block opacity-0 translate-y-[60px]">
+    <span key={index} className="inline-block">
       {char === " " ? "\u00A0" : char}
     </span>
   ));
@@ -70,7 +70,10 @@ export default function Home() {
     let active = true;
     const loadCms = async () => {
       try {
-        const response = await fetch("/api/cms/home", { method: "GET" });
+        const response = await fetch(`/api/cms/home?ts=${Date.now()}`, {
+          method: "GET",
+          cache: "no-store",
+        });
         if (!response.ok) return;
         const data = await response.json();
         if (!active) return;
@@ -97,7 +100,18 @@ export default function Home() {
     [...(section?.items ?? [])]
       .filter((item) => item.active !== false)
       .sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0));
-  
+
+  const heroSection = getSection("hero");
+  const heroSettings = (heroSection?.settings ?? {}) as Record<string, any>;
+  const heroLine1Candidate = heroSection?.title || heroSettings.line1;
+  const heroLine2Candidate = heroSection?.subtitle || heroSettings.line2;
+  const heroLine3Candidate = heroSettings.line3;
+  const heroLine1 = pickHeroLine(heroLine1Candidate, "WE COLLABORATE");
+  const heroLine2 = pickHeroLine(heroLine2Candidate, "WITH AMBITIOUS");
+  const heroLine3 = String(heroLine3Candidate ?? "AND");
+  const heroHighlight2 = String(heroSettings.highlight2 ?? "DJS");
+  const heroHighlight3 = String(heroSettings.highlight3 ?? "PRODUCERS.");
+
   useEffect(() => {
     // Hero Text Animation
     const chars1 = heroTextRef1.current?.querySelectorAll("span");
@@ -105,6 +119,8 @@ export default function Home() {
     const chars3 = heroTextRef3.current?.querySelectorAll("span");
     
     if (chars1 && chars2 && chars3) {
+      const allChars = [...chars1, ...chars2, ...chars3];
+      gsap.set(allChars, { y: 60, opacity: 0 });
       const tl = gsap.timeline();
       tl.to([...chars1], {
         y: 0, opacity: 1, stagger: 0.012, ease: "power3.out", duration: 0.5,
@@ -116,7 +132,9 @@ export default function Home() {
         y: 0, opacity: 1, stagger: 0.012, ease: "power3.out", duration: 0.5,
       }, "-=0.3");
     }
+  }, [heroLine1, heroLine2, heroLine3, heroHighlight2, heroHighlight3]);
 
+  useEffect(() => {
     // Scroll animations for sections. Do not animate opacity here; if
     // ScrollTrigger misses timing during client-only routing, content must stay visible.
     const sections = document.querySelectorAll(".scroll-section");
@@ -202,7 +220,6 @@ export default function Home() {
     { name: "Black Barbie", image: "/album-black-barbie.jpg" },
   ];
 
-  const heroSection = getSection("hero");
   const marqueeSection = getSection("marquee");
   const whatWeDoSection = getSection("what_we_do");
   const artistsPreviewSection = getSection("artists_preview");
@@ -213,12 +230,6 @@ export default function Home() {
   const collaborateSection = getSection("collaborate");
   const footerSection = getSection("footer");
 
-  const heroSettings = (heroSection?.settings ?? {}) as Record<string, any>;
-  const heroLine1 = pickHeroLine(heroSettings.line1, "WE COLLABORATE");
-  const heroLine2 = pickHeroLine(heroSettings.line2, "WITH AMBITIOUS");
-  const heroLine3 = String(heroSettings.line3 ?? "AND");
-  const heroHighlight2 = String(heroSettings.highlight2 ?? "DJS");
-  const heroHighlight3 = String(heroSettings.highlight3 ?? "PRODUCERS.");
   const heroDescription = heroSection?.body || "Booking world-renowned and rising music artists, DJs, and producers out of Jamaica.";
   const heroCtaLabel = heroSection?.ctaLabel || "EXPLORE ARTISTS";
   const heroCtaUrl = heroSection?.ctaUrl || "/artists";

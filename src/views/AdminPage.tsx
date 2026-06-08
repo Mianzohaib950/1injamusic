@@ -53,6 +53,11 @@ function shortId(value: string, max = 18) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
 }
 
+function capitalizeFirst(value: string) {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
@@ -492,7 +497,7 @@ function CmsPanel() {
             Page
             <select className={`${inputClass} mt-2`} value={selectedPageKey} onChange={(e) => { setSelectedPageKey(e.target.value); setEditingSectionId(""); setSelectedSectionId(""); }}>
               {pages.map((page) => (
-                <option key={page.id} value={page.pageKey}>{page.title} ({page.pageKey})</option>
+                <option key={page.id} value={page.pageKey}>{page.title} ({capitalizeFirst(page.pageKey)})</option>
               ))}
             </select>
           </label>
@@ -513,7 +518,7 @@ function CmsPanel() {
             <tbody>
               {pages.map((page) => (
                 <tr key={page.id} className="border-b border-[#222]">
-                  <td className="px-3 py-2 text-white font-mono text-xs">{page.pageKey}</td>
+                  <td className="px-3 py-2 text-white font-mono text-xs">{capitalizeFirst(page.pageKey)}</td>
                   <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.title}</td>
                   <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.active ? "Yes" : "No"}</td>
                   <td className="px-3 py-2">
@@ -568,6 +573,12 @@ function CmsPanel() {
       <AdminTable
         rows={data}
         columns={["sectionKey", "sectionType", "title", "sortOrder", "active"]}
+        formatCell={(row, column, value) => {
+          if (column === "sectionKey" || column === "sectionType") {
+            return capitalizeFirst(String(value ?? ""));
+          }
+          return undefined;
+        }}
         actions={(row) => (
           <>
             <button className={compactActionClass} onClick={() => {
@@ -595,7 +606,7 @@ function CmsPanel() {
       />
 
       <div className={`${panelClass} p-5 mt-6`}>
-        <h3 className="text-white font-bebas text-3xl mb-4">SECTION ITEMS {currentSection ? `(${currentSection.sectionKey})` : ""}</h3>
+        <h3 className="text-white font-bebas text-3xl mb-4">SECTION ITEMS {currentSection ? `(${capitalizeFirst(currentSection.sectionKey)})` : ""}</h3>
         {!currentSection && <p className="text-[var(--brand-gray)] font-sans">Select a section to manage its items.</p>}
         {currentSection && (
           <>
@@ -950,7 +961,17 @@ function SimpleForm({ fields, form, setForm, onSave, saveLabel, disabledId }: { 
   );
 }
 
-function AdminTable({ rows, columns, actions }: { rows: any[]; columns: string[]; actions?: (row: any) => React.ReactNode }) {
+function AdminTable({
+  rows,
+  columns,
+  actions,
+  formatCell,
+}: {
+  rows: any[];
+  columns: string[];
+  actions?: (row: any) => React.ReactNode;
+  formatCell?: (row: any, column: string, value: unknown) => React.ReactNode | undefined;
+}) {
   return (
     <div className={`${panelClass} overflow-x-auto`}>
       <table className="w-full table-fixed">
@@ -969,7 +990,8 @@ function AdminTable({ rows, columns, actions }: { rows: any[]; columns: string[]
             <tr key={row.id ?? row.slug} className="border-b border-[#222]">
               {columns.map((column) => (
                 <td key={column} className="px-3 py-3 text-white font-sans text-sm truncate">
-                  {Array.isArray(row[column]) ? row[column].join(", ") : column.toLowerCase().includes("cents") ? money(row[column] ?? 0) : String(row[column] ?? "")}
+                  {formatCell?.(row, column, row[column]) ??
+                    (Array.isArray(row[column]) ? row[column].join(", ") : column.toLowerCase().includes("cents") ? money(row[column] ?? 0) : String(row[column] ?? ""))}
                 </td>
               ))}
               {actions && (
