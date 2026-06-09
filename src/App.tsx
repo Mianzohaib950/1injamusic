@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -30,12 +30,19 @@ import AuthPage from "@/views/AuthPage";
 import AccountPage from "@/views/AccountPage";
 import AdminPage from "@/views/AdminPage";
 import NotFound from "@/views/not-found";
+import { loadProductsCatalog } from "@/lib/productCatalogClient";
 
 const queryClient = new QueryClient();
 
 function App() {
   const [loaded, setLoaded] = useState(false);
   const handleLoaderComplete = useCallback(() => setLoaded(true), []);
+
+  useEffect(() => {
+    loadProductsCatalog().catch(() => {
+      // Prefetch is best-effort.
+    });
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

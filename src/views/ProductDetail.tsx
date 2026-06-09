@@ -8,7 +8,7 @@ import type { MerchProduct } from "@/data/merch";
 import { useCart } from "@/context/CartContext";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
-import { apiGet } from "@/lib/api";
+import { getCachedProducts, loadProductsCatalog } from "@/lib/productCatalogClient";
 import { toast } from "sonner";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -32,7 +32,8 @@ export default function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const [products, setProducts] = useState<MerchProduct[]>([]);
+  const [products, setProducts] = useState<MerchProduct[]>(() => getCachedProducts() ?? []);
+  const [productsLoading, setProductsLoading] = useState(() => !getCachedProducts());
   const product = products.find((item) => item.id === (productId ?? ""));
   const [activeImg, setActiveImg] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
@@ -59,22 +60,14 @@ export default function ProductDetail() {
 
   useEffect(() => {
     let active = true;
-    const normalizeProduct = (item: any): MerchProduct => ({
-      ...item,
-      category: item.category || "tee",
-      badge: (item.badge ?? null) as MerchProduct["badge"],
-      sizes: Array.isArray(item.sizes) && item.sizes.length > 0 ? item.sizes : ["One Size"],
-      imageHover: item.imageHover || item.image,
-    });
-
     const loadProducts = async () => {
       try {
-        const rows = await apiGet<any[]>("/products");
-        if (active && Array.isArray(rows)) {
-          setProducts(rows.map(normalizeProduct));
-        }
+        const rows = await loadProductsCatalog();
+        if (!active) return;
+        setProducts(rows);
+        setProductsLoading(false);
       } catch {
-        // Keep current list if API is unavailable.
+        if (active) setProductsLoading(false);
       }
     };
 
@@ -126,6 +119,14 @@ export default function ProductDetail() {
     }, relatedRef);
     return () => ctx.revert();
   }, [related]);
+
+  if (productsLoading) {
+    return (
+      <main className="min-h-screen bg-[var(--brand-black)] flex flex-col items-center justify-center pt-32 px-6">
+        <p className="text-[var(--brand-gray)] font-bebas text-3xl mb-6">LOADING PRODUCT...</p>
+      </main>
+    );
+  }
 
   if (!product) {
     return (

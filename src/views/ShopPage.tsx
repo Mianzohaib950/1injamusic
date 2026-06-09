@@ -9,35 +9,19 @@ import type { MerchProduct } from "@/data/merch";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
 import { apiGet } from "@/lib/api";
+import { getCachedProducts, loadProductsCatalog } from "@/lib/productCatalogClient";
 
 gsap.registerPlugin(ScrollTrigger);
 
 const CATS = ["All", ...categories.map((c) => c.toUpperCase())];
-
-type ProductResponse = Omit<MerchProduct, "category" | "badge"> & {
-  category: string;
-  badge: string | null;
-};
-
-function normalizeProduct(product: ProductResponse): MerchProduct {
-  const normalizedCategory = categories.includes(product.category as (typeof categories)[number])
-    ? (product.category as (typeof categories)[number])
-    : "tee";
-  return {
-    ...product,
-    category: normalizedCategory,
-    badge: product.badge as MerchProduct["badge"],
-    sizes: Array.isArray(product.sizes) && product.sizes.length > 0 ? product.sizes : ["One Size"],
-    imageHover: product.imageHover || product.image,
-  };
-}
 
 export default function ShopPage() {
   const [searchParams] = useSearchParams();
   const [activeArtist, setActiveArtist] = useState("All Artists");
   const [activeCat, setActiveCat] = useState("All");
   const [quickProduct, setQuickProduct] = useState<MerchProduct | null>(null);
-  const [products, setProducts] = useState<MerchProduct[]>([]);
+  const [products, setProducts] = useState<MerchProduct[]>(() => getCachedProducts() ?? []);
+  const [productsLoading, setProductsLoading] = useState(() => !getCachedProducts());
   const [heroTitle, setHeroTitle] = useState("OFFICIAL\nMERCH SHOP");
   const [heroBody, setHeroBody] = useState("Exclusive drops from Hintell, Dark Koko, Swazz & Mee$ch. Represent the movement.");
   const [heroSubtitle, setHeroSubtitle] = useState("");
@@ -61,12 +45,12 @@ export default function ShopPage() {
     let active = true;
     const loadProducts = async () => {
       try {
-        const rows = await apiGet<ProductResponse[]>("/products");
-        if (active && Array.isArray(rows)) {
-          setProducts(rows.map(normalizeProduct));
-        }
+        const rows = await loadProductsCatalog();
+        if (!active) return;
+        setProducts(rows);
+        setProductsLoading(false);
       } catch {
-        // Keep current list when API is unavailable.
+        if (active) setProductsLoading(false);
       }
     };
     loadProducts();
@@ -269,6 +253,7 @@ export default function ShopPage() {
           <p className="text-[var(--brand-gray)] font-sans text-sm">
             {filtered.length} product{filtered.length !== 1 ? "s" : ""}
           </p>
+          {productsLoading && <p className="text-[var(--brand-gray)] font-sans text-xs">Loading products...</p>}
         </div>
 
         <motion.div

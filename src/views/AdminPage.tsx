@@ -523,7 +523,7 @@ function CmsPanel() {
               <tr className="border-b border-[#222]">
                 <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">PAGE KEY</th>
                 <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">TITLE</th>
-                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">ACTIVE</th>
+                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">STATUS</th>
                 <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">ACTIONS</th>
               </tr>
             </thead>
@@ -997,7 +997,7 @@ function AdminTable({
           <tr className="border-b border-[#222]">
             {columns.map((column) => (
               <th key={column} className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">
-                {column.toUpperCase()}
+                {column.toLowerCase() === "active" ? "STATUS" : column.toUpperCase()}
               </th>
             ))}
             {actions && <th className="w-[190px] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">ACTIONS</th>}
