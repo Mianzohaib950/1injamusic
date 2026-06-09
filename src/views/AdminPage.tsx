@@ -43,6 +43,10 @@ const actionClass =
   "inline-flex items-center justify-center gap-2 bg-[var(--brand-yellow)] text-black font-bebas tracking-widest px-4 py-2 hover:bg-white transition-colors disabled:opacity-50";
 const ghostClass =
   "inline-flex items-center justify-center gap-2 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-4 py-2 hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
+const ADMIN_CACHE_TTL_MS = 60_000;
+const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
+const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
+const adminDataInflight = new Map<string, Promise<unknown>>();
 
 function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -73,6 +77,64 @@ function formatDateTime(value: string) {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+function getStoredAdminCache(path: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${ADMIN_CACHE_STORAGE_PREFIX}${path}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { data: unknown; timestamp: number };
+    if (!parsed || typeof parsed.timestamp !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function getAnyAdminCache<T>(path: string) {
+  const memory = adminDataCache.get(path);
+  if (memory) return memory.data as T;
+  const stored = getStoredAdminCache(path);
+  if (!stored) return null;
+  adminDataCache.set(path, stored);
+  return stored.data as T;
+}
+
+function getFreshAdminCache<T>(path: string) {
+  const cached = adminDataCache.get(path) ?? getStoredAdminCache(path);
+  if (!cached) return null;
+  if (Date.now() - cached.timestamp > ADMIN_CACHE_TTL_MS) return null;
+  adminDataCache.set(path, cached);
+  return cached.data as T;
+}
+
+function setAdminCache(path: string, data: unknown) {
+  const payload = { data, timestamp: Date.now() };
+  adminDataCache.set(path, payload);
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(`${ADMIN_CACHE_STORAGE_PREFIX}${path}`, JSON.stringify(payload));
+  } catch {
+    // Ignore storage quota errors.
+  }
+}
+
+async function fetchAdminData<T>(path: string) {
+  const existing = adminDataInflight.get(path);
+  if (existing) return existing as Promise<T>;
+
+  const request = apiGet<T>(path)
+    .then((result) => {
+      setAdminCache(path, result);
+      return result;
+    })
+    .finally(() => {
+      adminDataInflight.delete(path);
+    });
+
+  adminDataInflight.set(path, request as Promise<unknown>);
+  return request;
 }
 
 function AdminShell({ section, children }: { section: AdminSection; children: React.ReactNode }) {
@@ -111,31 +173,39 @@ function AdminShell({ section, children }: { section: AdminSection; children: Re
 }
 
 function useAdminData<T>(path: string, fallback: T) {
-  const [data, setData] = useState<T>(fallback);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<T>(() => getAnyAdminCache<T>(path) ?? fallback);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (options?: { background?: boolean; force?: boolean }) => {
+    const cached = options?.force ? null : getAnyAdminCache<T>(path);
+    if (cached != null) {
+      setData(cached);
+    }
+
     setError("");
     try {
-      setData(await apiGet<T>(path));
+      const fresh = await fetchAdminData<T>(path);
+      setData(fresh);
     } catch (error: any) {
       setError(error?.message ?? "Unable to load data.");
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    const cached = getAnyAdminCache<T>(path);
+    if (cached != null) {
+      setData(cached);
+      load({ background: true });
+      return;
+    }
+    load({ background: true });
   }, [path]);
 
-  return { data, loading, error, reload: load };
+  return { data, loading, error, reload: () => load({ force: true }) };
 }
 
 function StatusText({ loading, error }: { loading: boolean; error: string }) {
-  if (loading) return <p className="text-[var(--brand-gray)] font-bebas text-xl">Loading...</p>;
   if (error) return <p className="text-red-400 font-sans text-sm">{error}</p>;
   return null;
 }
@@ -1035,6 +1105,28 @@ export default function AdminPage() {
     if (orderId) return "orders";
     return sections.some((item) => item.id === sectionParam) ? (sectionParam as AdminSection) : "dashboard";
   }, [sectionParam, orderId]);
+
+  useEffect(() => {
+    if (!isLoggedIn || user?.role !== "admin") return;
+    const prefetchPaths = [
+      "/admin/dashboard",
+      "/admin/products",
+      "/admin/artists",
+      "/admin/orders",
+      "/admin/users",
+      "/admin/bookings",
+      "/admin/event-contacts",
+      "/admin/cms/pages",
+      "/admin/cms/sections?pageKey=home",
+    ];
+
+    prefetchPaths.forEach((path) => {
+      if (getFreshAdminCache(path)) return;
+      fetchAdminData(path).catch(() => {
+        // Best-effort prefetch only.
+      });
+    });
+  }, [isLoggedIn, user?.role]);
 
   if (!isLoggedIn) return <Navigate to="/auth" replace state={{ from: "/admin", tab: "login" }} />;
   if (user?.role !== "admin") return <Navigate to="/account" replace />;
