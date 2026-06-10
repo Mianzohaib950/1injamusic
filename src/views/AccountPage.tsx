@@ -122,7 +122,7 @@ function AddressForm({
 }
 
 export default function AccountPage() {
-  const { user, logout, updateProfile, changePassword, savedAddresses, addAddress, updateAddress, removeAddress, setDefaultAddress, orders } = useAuth();
+  const { user, isAuthLoading, logout, updateProfile, changePassword, savedAddresses, addAddress, updateAddress, removeAddress, setDefaultAddress, orders } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -148,8 +148,18 @@ export default function AccountPage() {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) navigate("/auth");
-  }, [user, navigate]);
+    if (!isAuthLoading && !user) navigate("/auth");
+  }, [isAuthLoading, user, navigate]);
+
+  if (isAuthLoading) {
+    return (
+      <main className="w-full min-h-screen bg-[var(--brand-black)] pt-28 pb-20 px-6 md:px-12">
+        <div className="max-w-7xl mx-auto">
+          <p className="text-[var(--brand-gray)] font-bebas text-3xl">LOADING ACCOUNT...</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!user) return null;
 

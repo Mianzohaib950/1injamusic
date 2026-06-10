@@ -1,12 +1,44 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Calendar, MapPin, Users, Tag, ArrowRight } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ALL_EVENTS } from "@/data/events";
+import { apiGet } from "@/lib/api";
 
 gsap.registerPlugin(ScrollTrigger);
+const UNSPLASH_QUERY = "?auto=format&fit=crop&w=1600&q=80";
+
+type CmsEventCard = {
+  slug: string;
+  name: string;
+  tag: string;
+  date: string;
+  image: string;
+  description: string;
+};
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const slugFromEventLink = (value: string) => {
+  const match = value.trim().match(/^\/events\/([^/?#]+)/i);
+  return match ? match[1] : "";
+};
+
+const normalizeImageUrl = (value: string) => {
+  const image = String(value || "").trim();
+  if (!image) return "";
+  if (image.includes("images.unsplash.com/photo-") && !image.includes("?")) {
+    return `${image}${UNSPLASH_QUERY}`;
+  }
+  return image;
+};
 
 export default function EventDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -14,12 +46,83 @@ export default function EventDetail() {
   const heroRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [heroImage, setHeroImage] = useState("");
+  const [cmsCards, setCmsCards] = useState<CmsEventCard[]>([]);
 
-  const event = ALL_EVENTS.find((e) => e.slug === slug);
+  const baseEvent = ALL_EVENTS.find((e) => e.slug === slug);
+  const cmsEvent = useMemo(
+    () => cmsCards.find((item) => item.slug === (slug ?? "")),
+    [cmsCards, slug],
+  );
+  const event = useMemo(() => {
+    if (baseEvent) {
+      return {
+        ...baseEvent,
+        name: cmsEvent?.name || baseEvent.name,
+        tag: cmsEvent?.tag || baseEvent.tag,
+        date: cmsEvent?.date || baseEvent.date,
+        description: cmsEvent?.description || baseEvent.description,
+      image: normalizeImageUrl(cmsEvent?.image || baseEvent.image),
+      };
+    }
+    if (!cmsEvent) return null;
+    return {
+      id: -1,
+      slug: cmsEvent.slug,
+      name: cmsEvent.name || "UNTITLED EVENT",
+      tag: cmsEvent.tag || "event",
+      date: cmsEvent.date || "TBA",
+      location: "TBA",
+      venue: "TBA",
+      description: cmsEvent.description || "",
+      longDescription: cmsEvent.description || "Event details will be updated soon.",
+      artists: [],
+      image: normalizeImageUrl(cmsEvent.image) || "",
+    };
+  }, [baseEvent, cmsEvent]);
   const related = ALL_EVENTS.filter((e) => e.slug !== slug && e.tag === event?.tag).slice(0, 3);
   const otherRelated = related.length < 3
     ? [...related, ...ALL_EVENTS.filter((e) => e.slug !== slug && e.tag !== event?.tag).slice(0, 3 - related.length)]
     : related;
+
+  useEffect(() => {
+    let active = true;
+    const loadCms = async () => {
+      try {
+        const data = await apiGet<any>("/cms/events");
+        if (!active) return;
+        const sections = Array.isArray(data?.sections) ? data.sections : [];
+        const content = sections.find((section: any) => section.sectionKey === "content");
+        const items = Array.isArray(content?.items) ? content.items : [];
+        const mapped: CmsEventCard[] = items
+          .filter((item: any) => item && item.active !== false)
+          .map((item: any) => {
+            const tags = Array.isArray(item.tags)
+              ? item.tags.map((tag: any) => String(tag).toLowerCase()).filter(Boolean)
+              : [];
+            const primaryTag = tags[0] ?? "event";
+            const title = String(item.title ?? "").trim();
+            const linkUrl = String(item.linkUrl ?? "").trim();
+            const itemSlug = String(item.itemKey ?? "").trim() || slugFromEventLink(linkUrl) || slugify(title || "event");
+            return {
+              slug: itemSlug,
+              name: title || "UNTITLED EVENT",
+              tag: primaryTag,
+              date: String(item.subtitle ?? "").trim() || "TBA",
+              image: String(item.imageUrl ?? "").trim(),
+              description: String(item.description ?? "").trim(),
+            };
+          });
+        setCmsCards(mapped);
+      } catch {
+        // keep static fallback data
+      }
+    };
+    loadCms();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -69,6 +172,30 @@ export default function EventDetail() {
     return () => ctx.revert();
   }, [slug, event]);
 
+  useEffect(() => {
+    const primaryImage = normalizeImageUrl(event?.image || "");
+    const baseImage = normalizeImageUrl(baseEvent?.image || "");
+
+    if (!primaryImage && !baseImage) {
+      setHeroImage("");
+      return;
+    }
+
+    const probe = new Image();
+    probe.onload = () => setHeroImage(primaryImage || baseImage || "");
+    probe.onerror = () => {
+      if (baseImage && baseImage !== primaryImage) {
+        const fallbackProbe = new Image();
+        fallbackProbe.onload = () => setHeroImage(baseImage);
+        fallbackProbe.onerror = () => setHeroImage(primaryImage || baseImage || "");
+        fallbackProbe.src = baseImage;
+        return;
+      }
+      setHeroImage(primaryImage || baseImage || "");
+    };
+    probe.src = primaryImage || baseImage;
+  }, [event?.image, baseEvent?.image]);
+
   if (!event) {
     return (
       <main className="w-full min-h-screen bg-[var(--brand-black)] flex flex-col items-center justify-center px-6 text-center pt-32">
@@ -105,7 +232,7 @@ export default function EventDetail() {
           ref={heroRef}
           className="absolute inset-0 scale-110 bg-cover bg-center"
           style={{
-            backgroundImage: `url('${event.image}')`,
+            backgroundImage: heroImage ? `url('${heroImage}')` : undefined,
             filter: "brightness(0.35)",
           }}
         />
@@ -312,8 +439,12 @@ export default function EventDetail() {
                 >
                   <div className="aspect-video relative overflow-hidden">
                     <img
-                      src={rel.image}
+                      src={normalizeImageUrl(rel.image)}
                       alt={rel.name}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.style.visibility = "hidden";
+                      }}
                       className="w-full h-full object-cover brightness-50 group-hover:brightness-75 group-hover:scale-105 transition-all duration-500"
                     />
                     <div className="absolute top-3 right-3 bg-[var(--brand-yellow)] text-black font-bebas px-3 py-0.5 text-xs tracking-widest rounded-full">

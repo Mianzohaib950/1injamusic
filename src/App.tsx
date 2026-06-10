@@ -29,6 +29,7 @@ import OrderConfirmation from "@/views/OrderConfirmation";
 import AuthPage from "@/views/AuthPage";
 import AccountPage from "@/views/AccountPage";
 import AdminPage from "@/views/AdminPage";
+import CmsPage from "@/views/CmsPage";
 import NotFound from "@/views/not-found";
 import { loadProductsCatalog } from "@/lib/productCatalogClient";
 
@@ -73,6 +74,7 @@ function App() {
                   <Route path="/admin" element={<AdminPage />} />
                   <Route path="/admin/:section" element={<AdminPage />} />
                   <Route path="/admin/orders/:orderId" element={<AdminPage />} />
+                  <Route path="/:pageKey" element={<CmsPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AnimatePresence>

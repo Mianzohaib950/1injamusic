@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useState, useEffect, ReactNode } from "react";
 import { merchProducts, type MerchProduct } from "@/data/merch";
+import { useAuth } from "@/context/AuthContext";
 
 export interface CartItem {
   cartKey: string;
@@ -111,7 +112,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
 
 interface CartContextType {
   cartItems: CartItem[];
-  addToCart: (product: MerchProduct, size: string, quantity?: number) => void;
+  addToCart: (product: MerchProduct, size: string, quantity?: number) => boolean;
   removeFromCart: (cartKey: string) => void;
   updateQuantity: (cartKey: string, quantity: number) => void;
   clearCart: () => void;
@@ -124,11 +125,18 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { isLoggedIn } = useAuth();
   const [state, dispatch] = useReducer(cartReducer, { items: [] });
   const [isCartOpen, setCartOpen] = useState(false);
 
   useEffect(() => {
     try {
+      const hasToken = localStorage.getItem("1jm_token");
+      if (!hasToken) {
+        localStorage.removeItem("1nja_cart");
+        dispatch({ type: "CLEAR" });
+        return;
+      }
       const stored = localStorage.getItem("1nja_cart");
       if (stored) {
         dispatch({ type: "LOAD", items: normalizeStoredCartItems(JSON.parse(stored)) });
@@ -137,10 +145,29 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    try {
+      const hasToken = localStorage.getItem("1jm_token");
+      if (!isLoggedIn && !hasToken) {
+        dispatch({ type: "CLEAR" });
+        setCartOpen(false);
+        localStorage.removeItem("1nja_cart");
+      }
+    } catch {}
+  }, [isLoggedIn]);
+
+  useEffect(() => {
     localStorage.setItem("1nja_cart", JSON.stringify(state.items));
   }, [state.items]);
 
   const addToCart = (product: MerchProduct, size: string, quantity = 1) => {
+    const hasToken = typeof window !== "undefined" ? localStorage.getItem("1jm_token") : null;
+    if (!isLoggedIn && !hasToken) {
+      dispatch({ type: "CLEAR" });
+      setCartOpen(false);
+      localStorage.removeItem("1nja_cart");
+      return false;
+    }
+
     const cartKey = `${product.id}::${size}`;
     dispatch({
       type: "ADD",
@@ -156,6 +183,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       },
     });
     setCartOpen(true);
+    return true;
   };
 
   const removeFromCart = (cartKey: string) => dispatch({ type: "REMOVE", cartKey });

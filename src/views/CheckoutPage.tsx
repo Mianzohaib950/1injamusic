@@ -247,7 +247,7 @@ const TAX_RATE = 0.08;
 
 export default function CheckoutPage() {
   const { cartItems, totalPrice, clearCart } = useCart();
-  const { isLoggedIn, user, savedAddresses, refreshOrders } = useAuth();
+  const { isLoggedIn, isAuthLoading, user, savedAddresses, refreshOrders } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>(1);
 
@@ -297,6 +297,14 @@ export default function CheckoutPage() {
     clearCart();
     navigate("/order-confirmation", { state: { orderId: createdOrderId } });
   };
+
+  if (isAuthLoading) {
+    return (
+      <main className="w-full min-h-screen bg-[var(--brand-black)] flex flex-col items-center justify-center px-6 text-center">
+        <p className="text-[var(--brand-gray)] font-bebas text-3xl">LOADING CHECKOUT...</p>
+      </main>
+    );
+  }
 
   if (!isLoggedIn) {
     return (

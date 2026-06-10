@@ -49,6 +49,7 @@ export interface Order {
 interface AuthContextType {
   user: UserProfile | null;
   isLoggedIn: boolean;
+  isAuthLoading: boolean;
   login: (email: string, password: string) => Promise<string | null>;
   signup: (name: string, email: string, phone: string, password: string) => Promise<string | null>;
   logout: () => void;
@@ -65,6 +66,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+const USER_CACHE_KEY = "1jm_user";
 
 const mapApiOrder = (order: any): Order => ({
   id: order.id,
@@ -97,6 +99,7 @@ const mapApiOrder = (order: any): Order => ({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
 
@@ -120,17 +123,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadSession = async () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("1jm_token") : null;
-    if (!token) return;
+    if (!token) {
+      localStorage.removeItem(USER_CACHE_KEY);
+      setIsAuthLoading(false);
+      return;
+    }
+
+    try {
+      const cachedUser = localStorage.getItem(USER_CACHE_KEY);
+      if (cachedUser) {
+        setUser(JSON.parse(cachedUser));
+      }
+    } catch {
+      localStorage.removeItem(USER_CACHE_KEY);
+    }
 
     try {
       const profile = await apiGet<UserProfile>("/auth/me");
       setUser(profile);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
       await Promise.all([refreshAddresses(), refreshOrders()]);
-    } catch {
-      localStorage.removeItem("1jm_token");
-      setUser(null);
-      setSavedAddresses([]);
-      setOrders([]);
+    } catch (error: any) {
+      const status = Number(error?.status ?? 0);
+      const isAuthError = status === 401 || status === 403;
+      if (isAuthError) {
+        localStorage.removeItem("1jm_token");
+        localStorage.removeItem("1nja_cart");
+        localStorage.removeItem(USER_CACHE_KEY);
+        setUser(null);
+        setSavedAddresses([]);
+        setOrders([]);
+      }
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
@@ -142,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const result = await apiPost<{ user: UserProfile; token: string }>("/auth/login", { email, password });
       localStorage.setItem("1jm_token", result.token);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(result.user));
       setUser(result.user);
       await Promise.all([refreshAddresses(), refreshOrders()]);
       return null;
@@ -154,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const result = await apiPost<{ user: UserProfile; token: string }>("/auth/signup", { name, email, phone, password });
       localStorage.setItem("1jm_token", result.token);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(result.user));
       setUser(result.user);
       setSavedAddresses([]);
       setOrders([]);
@@ -168,6 +195,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSavedAddresses([]);
     setOrders([]);
     localStorage.removeItem("1jm_token");
+    localStorage.removeItem("1nja_cart");
+    localStorage.removeItem(USER_CACHE_KEY);
   };
 
   const updateProfile = async (data: Partial<Pick<UserProfile, "name" | "phone">>) => {
@@ -175,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const updated = await apiPut<UserProfile>("/auth/me", data);
       setUser(updated);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(updated));
       return null;
     } catch (error: any) {
       return error?.message ?? "Unable to update profile.";
@@ -232,6 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoggedIn: !!user,
+        isAuthLoading,
         login,
         signup,
         logout,

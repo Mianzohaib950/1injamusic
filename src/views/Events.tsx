@@ -30,7 +30,6 @@ const slugify = (value: string) =>
 type CmsEventCard = {
   id: string;
   slug: string;
-  linkUrl: string;
   name: string;
   tag: string;
   date: string;
@@ -41,6 +40,73 @@ const slugFromEventLink = (value: string) => {
   const match = value.trim().match(/^\/events\/([^/?#]+)/i);
   return match ? match[1] : "";
 };
+const UNSPLASH_QUERY = "?auto=format&fit=crop&w=1200&q=80";
+const normalizeImageUrl = (value: string) => {
+  const image = String(value || "").trim();
+  if (!image) return "";
+  if (image.includes("images.unsplash.com/photo-") && !image.includes("?")) {
+    return `${image}${UNSPLASH_QUERY}`;
+  }
+  return image;
+};
+
+type EventCardRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  tag: string;
+  date: string;
+  image: string;
+  baseImage?: string;
+};
+
+function EventCardImage({
+  event,
+  index,
+  defaultImageBySlug,
+}: {
+  event: EventCardRecord;
+  index: number;
+  defaultImageBySlug: Map<string, string>;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  const sources = useMemo(() => {
+    const chain = [
+      normalizeImageUrl(event.image),
+      normalizeImageUrl(event.baseImage ?? ""),
+      normalizeImageUrl(defaultImageBySlug.get(event.slug) ?? ""),
+      `https://picsum.photos/seed/${encodeURIComponent(event.slug || event.id)}/1200/700`,
+    ].filter(Boolean);
+    return Array.from(new Set(chain));
+  }, [event.id, event.slug, event.image, event.baseImage, defaultImageBySlug]);
+
+  useEffect(() => {
+    setLoaded(false);
+    setSourceIndex(0);
+  }, [event.slug, event.image, event.baseImage]);
+
+  const activeSrc = sources[sourceIndex] ?? "";
+
+  return (
+    <img
+      src={activeSrc}
+      alt={event.name}
+      loading={index < 8 ? "eager" : "lazy"}
+      decoding="async"
+      fetchPriority={index < 4 ? "high" : "auto"}
+      onLoad={() => setLoaded(true)}
+      onError={() => {
+        setLoaded(false);
+        setSourceIndex((current) => (current < sources.length - 1 ? current + 1 : current));
+      }}
+      className={`absolute inset-0 w-full h-full object-cover brightness-50 group-hover:brightness-75 group-hover:scale-105 transition-all duration-300 ${
+        loaded ? "opacity-100" : "opacity-0"
+      }`}
+    />
+  );
+}
 
 export default function Events() {
   const heroRef = useRef<HTMLHeadingElement>(null);
@@ -50,6 +116,11 @@ export default function Events() {
   const [contentTitle, setContentTitle] = useState("UPCOMING & PAST EVENTS");
   const [contentImage, setContentImage] = useState("");
   const [cmsCards, setCmsCards] = useState<CmsEventCard[]>([]);
+  const [readyCmsImages, setReadyCmsImages] = useState<Record<string, boolean>>({});
+  const defaultImageBySlug = useMemo(
+    () => new Map(ALL_EVENTS.map((event) => [event.slug, normalizeImageUrl(event.image)])),
+    [],
+  );
 
   useEffect(() => {
     const chars = heroRef.current?.querySelectorAll("span");
@@ -92,11 +163,10 @@ export default function Events() {
             return {
               id: String(item.id ?? itemSlug),
               slug: itemSlug,
-              linkUrl,
               name: itemTitle || "UNTITLED EVENT",
               tag: primaryTag,
               date: String(item.subtitle ?? "").trim() || "TBA",
-              image: String(item.imageUrl ?? "").trim() || "/events-banner.jpg",
+              image: normalizeImageUrl(String(item.imageUrl ?? "").trim()) || defaultImageBySlug.get(itemSlug) || "",
             };
           });
         setCmsCards(nextCards);
@@ -114,39 +184,52 @@ export default function Events() {
     const defaults = ALL_EVENTS.map((event) => ({
       id: String(event.id),
       slug: event.slug,
-      linkUrl: `/events/${event.slug}`,
       name: event.name,
       tag: event.tag,
       date: event.date,
-      image: event.image,
+      image: normalizeImageUrl(event.image),
+      baseImage: normalizeImageUrl(event.image),
     }));
     if (cmsCards.length === 0) return defaults;
+    return cmsCards.map((card) => {
+      const base = defaults.find((event) => event.slug === card.slug);
+      const baseImage = base?.baseImage || "";
+      const cmsImage = card.image || "";
+      return {
+        ...(base ?? {}),
+        ...card,
+        image: readyCmsImages[card.slug] ? (cmsImage || baseImage) : (baseImage || cmsImage),
+        baseImage,
+      };
+    });
+  }, [cmsCards, readyCmsImages]);
 
-    const mergedBySlug = new Map(defaults.map((event) => [event.slug, event]));
-    const appended: typeof defaults = [];
-
-    for (const cmsCard of cmsCards) {
-      if (mergedBySlug.has(cmsCard.slug)) {
-        const base = mergedBySlug.get(cmsCard.slug)!;
-        mergedBySlug.set(cmsCard.slug, {
-          ...base,
-          ...cmsCard,
-          linkUrl: cmsCard.linkUrl || base.linkUrl,
-        });
-      } else {
-        appended.push(cmsCard);
-      }
-    }
-
-    return [...Array.from(mergedBySlug.values()), ...appended];
+  useEffect(() => {
+    if (cmsCards.length === 0) return;
+    let active = true;
+    cmsCards.forEach((card) => {
+      const url = normalizeImageUrl(card.image);
+      if (!url || readyCmsImages[card.slug]) return;
+      const probe = new Image();
+      probe.onload = () => {
+        if (!active) return;
+        setReadyCmsImages((current) => ({ ...current, [card.slug]: true }));
+      };
+      probe.onerror = () => {
+        if (!active) return;
+        setReadyCmsImages((current) => ({ ...current, [card.slug]: false }));
+      };
+      probe.src = url;
+    });
+    return () => {
+      active = false;
+    };
   }, [cmsCards]);
 
   const tags = useMemo(() => {
     const dynamicTags = Array.from(new Set(listEvents.map((event) => event.tag.toLowerCase())));
     return ["ALL", ...dynamicTags];
   }, [listEvents]);
-
-  const knownDetailSlugs = useMemo(() => new Set(ALL_EVENTS.map((event) => event.slug)), []);
 
   const filteredEvents = activeTag === "all"
     ? listEvents
@@ -232,21 +315,14 @@ export default function Events() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredEvents.map((event) => (
+          {filteredEvents.map((event, index) => (
             <Link
               key={event.id}
-              to={
-                event.linkUrl ||
-                (knownDetailSlugs.has(event.slug) ? `/events/${event.slug}` : "#")
-              }
+              to={event.slug ? `/events/${event.slug}` : "#"}
               className="bg-[var(--brand-card)] border border-[var(--brand-border)] overflow-hidden group hover:border-[var(--brand-yellow)] transition-colors"
             >
               <div className="aspect-video relative overflow-hidden">
-                <img
-                  src={event.image}
-                  alt={event.name}
-                  className="w-full h-full object-cover brightness-50 group-hover:brightness-75 group-hover:scale-105 transition-all duration-500"
-                />
+                <EventCardImage event={event} index={index} defaultImageBySlug={defaultImageBySlug} />
                 <div className="absolute top-4 right-4 bg-[var(--brand-yellow)] text-black font-bebas px-3 py-1 text-sm tracking-widest rounded-full">
                   #{event.tag}
                 </div>

@@ -274,6 +274,7 @@ function ProductsPanel() {
   const { data, loading, error, reload } = useAdminData<any[]>("/admin/products", []);
   const [form, setForm] = useState<any>(blank);
   const [editingId, setEditingId] = useState("");
+  const [showForm, setShowForm] = useState(false);
   const [imageFileName, setImageFileName] = useState("");
   const [hoverImageFileName, setHoverImageFileName] = useState("");
 
@@ -302,40 +303,70 @@ function ProductsPanel() {
     setImageFileName("");
     setHoverImageFileName("");
     setEditingId("");
+    setShowForm(false);
     await reload();
+  };
+
+  const startAddProduct = () => {
+    setForm(blank);
+    setEditingId("");
+    setImageFileName("");
+    setHoverImageFileName("");
+    setShowForm(true);
+  };
+
+  const cancelProductForm = () => {
+    setForm(blank);
+    setEditingId("");
+    setImageFileName("");
+    setHoverImageFileName("");
+    setShowForm(false);
   };
 
   return (
     <CrudLayout title="PRODUCTS" loading={loading} error={error}>
-      <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
-        {["id", "name", "artist", "artistSlug", "category", "image", "imageHover", "badge", "sizes"].map((key) => (
-          <input key={key} className={inputClass} placeholder={toDisplayLabel(key)} value={form[key] ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} disabled={key === "id" && !!editingId} />
-        ))}
-        <div className="text-[var(--brand-gray)] font-sans text-sm">
-          Image file
-          <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
-            <span className="text-white text-sm">{imageFileName || "No file selected"}</span>
-            <span className={ghostClass}>Choose</span>
-            <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("image", e.target.files?.[0])} />
-          </label>
-        </div>
-        <div className="text-[var(--brand-gray)] font-sans text-sm">
-          Hover image file
-          <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
-            <span className="text-white text-sm">{hoverImageFileName || "No file selected"}</span>
-            <span className={ghostClass}>Choose</span>
-            <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("imageHover", e.target.files?.[0])} />
-          </label>
-        </div>
-        <input className={inputClass} placeholder="Price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-        <input className={inputClass} placeholder="Original Price" type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} />
-        <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
-          <input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />
-          In Stock
-        </label>
-        <button className={actionClass} onClick={save}><Save size={16} /> {editingId ? "UPDATE" : "ADD"} PRODUCT</button>
+      <div className="mb-6 flex items-center justify-end gap-3">
+        {!showForm ? (
+          <button className={actionClass} onClick={startAddProduct}>
+            <Save size={16} /> ADD PRODUCT
+          </button>
+        ) : (
+          <button className={ghostClass} onClick={cancelProductForm}>
+            CANCEL
+          </button>
+        )}
       </div>
+      {showForm && (
+        <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
+          {["id", "name", "artist", "artistSlug", "category", "image", "imageHover", "badge", "sizes"].map((key) => (
+            <input key={key} className={inputClass} placeholder={toDisplayLabel(key)} value={form[key] ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} disabled={key === "id" && !!editingId} />
+          ))}
+          <div className="text-[var(--brand-gray)] font-sans text-sm">
+            Image file
+            <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
+              <span className="text-white text-sm">{imageFileName || "No file selected"}</span>
+              <span className={ghostClass}>Choose</span>
+              <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("image", e.target.files?.[0])} />
+            </label>
+          </div>
+          <div className="text-[var(--brand-gray)] font-sans text-sm">
+            Hover image file
+            <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
+              <span className="text-white text-sm">{hoverImageFileName || "No file selected"}</span>
+              <span className={ghostClass}>Choose</span>
+              <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("imageHover", e.target.files?.[0])} />
+            </label>
+          </div>
+          <input className={inputClass} placeholder="Price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          <input className={inputClass} placeholder="Original Price" type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} />
+          <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+            <input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />
+            In Stock
+          </label>
+          <button className={actionClass} onClick={save}><Save size={16} /> {editingId ? "UPDATE" : "ADD"} PRODUCT</button>
+        </div>
+      )}
       <AdminTable
         rows={data}
         columns={["name", "artist", "category", "price", "inStock"]}
@@ -345,7 +376,7 @@ function ProductsPanel() {
         }}
         actions={(row) => (
           <>
-            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setHoverImageFileName(""); }}>EDIT</button>
+            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setHoverImageFileName(""); setShowForm(true); }}>EDIT</button>
             <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/products/${row.id}`); await reload(); }}><Trash2 size={14} /></button>
           </>
         )}
@@ -359,20 +390,48 @@ function ArtistsPanel() {
   const { data, loading, error, reload } = useAdminData<any[]>("/admin/artists", []);
   const [form, setForm] = useState<any>(blank);
   const [editingSlug, setEditingSlug] = useState("");
+  const [showForm, setShowForm] = useState(false);
   const save = async () => {
     const payload = { ...form, genres: String(form.genres).split(",").map((item) => item.trim()).filter(Boolean), sortOrder: Number(form.sortOrder) };
     if (editingSlug) await apiPut(`/admin/artists/${editingSlug}`, payload);
     else await apiPost("/admin/artists", payload);
     setForm(blank);
     setEditingSlug("");
+    setShowForm(false);
     await reload();
   };
+
+  const startAddArtist = () => {
+    setForm(blank);
+    setEditingSlug("");
+    setShowForm(true);
+  };
+
+  const cancelArtistForm = () => {
+    setForm(blank);
+    setEditingSlug("");
+    setShowForm(false);
+  };
+
   return (
     <CrudLayout title="ARTISTS" loading={loading} error={error}>
-      <SimpleForm fields={["slug", "name", "genres", "bio", "image", "bookingEmail", "sortOrder"]} form={form} setForm={setForm} onSave={save} saveLabel={editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"} disabledId={!!editingSlug ? "slug" : ""} />
+      <div className="mb-6 flex items-center justify-end gap-3">
+        {!showForm ? (
+          <button className={actionClass} onClick={startAddArtist}>
+            <Save size={16} /> ADD ARTIST
+          </button>
+        ) : (
+          <button className={ghostClass} onClick={cancelArtistForm}>
+            CANCEL
+          </button>
+        )}
+      </div>
+      {showForm && (
+        <SimpleForm fields={["slug", "name", "genres", "bio", "image", "bookingEmail", "sortOrder"]} form={form} setForm={setForm} onSave={save} saveLabel={editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"} disabledId={!!editingSlug ? "slug" : ""} />
+      )}
       <AdminTable rows={data} columns={["name", "slug", "genres", "active"]} formatCell={(_, column, value) => column === "active" ? (value ? "Active" : "Inactive") : undefined} actions={(row) => (
         <>
-          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); }}>EDIT</button>
+          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setShowForm(true); }}>EDIT</button>
           <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/artists/${row.slug}`); await reload(); }}><Trash2 size={14} /></button>
         </>
       )} />
@@ -587,39 +646,69 @@ function CmsPanel() {
           <input className={inputClass} placeholder="New Page Title" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
           <button className={actionClass} onClick={addPage}><Save size={16} /> ADD PAGE</button>
         </div>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[620px]">
-            <thead>
-              <tr className="border-b border-[#222]">
-                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">PAGE KEY</th>
-                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">TITLE</th>
-                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">STATUS</th>
-                <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pages.map((page) => (
-                <tr key={page.id} className="border-b border-[#222]">
-                  <td className="px-3 py-2 text-white font-mono text-xs">{capitalizeFirst(page.pageKey)}</td>
-                  <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.title}</td>
-                  <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.active ? "Active" : "Inactive"}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button className={ghostClass} onClick={() => startEditPage(page)}>EDIT</button>
-                      <button className={ghostClass} disabled={protectedPageKeys.has(page.pageKey)} onClick={async () => deletePage(page)}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
+        <div className="mt-4">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[620px]">
+              <thead>
+                <tr className="border-b border-[#222]">
+                  <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">PAGE KEY</th>
+                  <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">TITLE</th>
+                  <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">STATUS</th>
+                  <th className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-2 text-xs md:text-sm">ACTIONS</th>
                 </tr>
-              ))}
-              {pages.length === 0 && (
-                <tr>
-                  <td className="px-3 py-6 text-[var(--brand-gray)] font-bebas text-xl" colSpan={4}>No pages found.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pages.map((page) => (
+                  <tr key={page.id} className="border-b border-[#222]">
+                    <td className="px-3 py-2 text-white font-mono text-xs">{capitalizeFirst(page.pageKey)}</td>
+                    <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.title}</td>
+                    <td className="px-3 py-2 text-white font-sans text-xs md:text-sm">{page.active ? "Active" : "Inactive"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button className={ghostClass} onClick={() => startEditPage(page)}>EDIT</button>
+                        <button className={ghostClass} disabled={protectedPageKeys.has(page.pageKey)} onClick={async () => deletePage(page)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {pages.length === 0 && (
+                  <tr>
+                    <td className="px-3 py-6 text-[var(--brand-gray)] font-bebas text-xl" colSpan={4}>No pages found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-[#222]">
+            {pages.map((page) => (
+              <div key={page.id} className="py-3 space-y-2">
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">PAGE KEY</p>
+                  <p className="text-white font-mono text-sm break-words">{capitalizeFirst(page.pageKey)}</p>
+                </div>
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">TITLE</p>
+                  <p className="text-white font-sans text-sm break-words">{page.title}</p>
+                </div>
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">STATUS</p>
+                  <p className="text-white font-sans text-sm">{page.active ? "Active" : "Inactive"}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button className={`${ghostClass} w-full`} onClick={() => startEditPage(page)}>EDIT</button>
+                  <button className={`${ghostClass} w-full`} disabled={protectedPageKeys.has(page.pageKey)} onClick={async () => deletePage(page)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {pages.length === 0 && (
+              <div className="py-6 text-[var(--brand-gray)] font-bebas text-xl">No pages found.</div>
+            )}
+          </div>
         </div>
         {editingPageId && (
           <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
@@ -819,65 +908,121 @@ function OrdersPanel({ orderId }: { orderId?: string }) {
   return (
     <CrudLayout title="ORDERS" loading={loading} error={error}>
       {!orderId && (
-        <div className={`${panelClass} overflow-x-auto`}>
-          <table className="w-full table-fixed">
-            <thead>
-              <tr className="border-b border-[#222]">
-                <th className="w-[19%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">ID</th>
-                <th className="w-[10%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">USER</th>
-                <th className="w-[17%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">PRODUCTS</th>
-                <th className="w-[9%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">TOTAL</th>
-                <th className="w-[14%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">CREATED</th>
-                <th className="w-[13%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">STATUS</th>
-                <th className="w-[18%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row) => (
-                <tr key={row.id} className="border-b border-[#222]">
-                  <td className="px-2 py-3 text-white font-sans text-sm truncate">{shortId(row.id)}</td>
-                  <td className="px-2 py-3 text-white font-sans text-sm truncate">{row.customer?.name || `${row.firstName} ${row.lastName}`}</td>
-                  <td className="px-2 py-3 text-white font-mono text-[11px] leading-4 truncate">
-                    {row.items.length > 0 ? row.items.map((item) => item.name).join(", ") : "-"}
-                  </td>
-                  <td className="px-2 py-3 text-white font-sans text-sm whitespace-nowrap">{money(row.totalCents)}</td>
-                  <td className="px-2 py-3 text-white font-sans text-sm">
-                    <span className="block truncate">{formatDateTime(row.createdAt)}</span>
-                  </td>
-                  <td className="px-2 py-3 text-white font-sans text-sm">
-                    <span className="block truncate">{row.status}</span>
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="flex flex-col gap-1 w-full">
-                      <button
-                        className={`${ghostClass} w-full text-xs py-1`}
-                        onClick={() => navigate(`/admin/orders/${row.id}`)}
-                      >
-                        VIEW
-                      </button>
-                      <select
-                        className="w-full bg-[#111] border border-[#333] text-white font-sans px-1 py-1 text-xs focus:border-[var(--brand-yellow)] focus:outline-none"
-                        value={row.status}
-                        onChange={async (e) => {
-                          await apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value });
-                          await reload();
-                        }}
-                      >
-                        {statuses.map((status) => <option key={status}>{status}</option>)}
-                      </select>
-                    </div>
-                  </td>
+        <div className={panelClass}>
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full table-fixed">
+              <thead>
+                <tr className="border-b border-[#222]">
+                  <th className="w-[19%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">ID</th>
+                  <th className="w-[10%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">USER</th>
+                  <th className="w-[17%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">PRODUCTS</th>
+                  <th className="w-[9%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">TOTAL</th>
+                  <th className="w-[14%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">CREATED</th>
+                  <th className="w-[13%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">STATUS</th>
+                  <th className="w-[18%] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-3 whitespace-nowrap">ACTIONS</th>
                 </tr>
-              ))}
-              {data.length === 0 && (
-                <tr>
-                  <td className="px-4 py-8 text-[var(--brand-gray)] font-bebas text-xl" colSpan={7}>
-                    No records found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.map((row) => (
+                  <tr key={row.id} className="border-b border-[#222]">
+                    <td className="px-2 py-3 text-white font-sans text-sm truncate">{shortId(row.id)}</td>
+                    <td className="px-2 py-3 text-white font-sans text-sm truncate">{row.customer?.name || `${row.firstName} ${row.lastName}`}</td>
+                    <td className="px-2 py-3 text-white font-mono text-[11px] leading-4 truncate">
+                      {row.items.length > 0 ? row.items.map((item) => item.name).join(", ") : "-"}
+                    </td>
+                    <td className="px-2 py-3 text-white font-sans text-sm whitespace-nowrap">{money(row.totalCents)}</td>
+                    <td className="px-2 py-3 text-white font-sans text-sm">
+                      <span className="block truncate">{formatDateTime(row.createdAt)}</span>
+                    </td>
+                    <td className="px-2 py-3 text-white font-sans text-sm">
+                      <span className="block truncate">{row.status}</span>
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="flex flex-col gap-1 w-full">
+                        <button
+                          className={`${ghostClass} w-full text-xs py-1`}
+                          onClick={() => navigate(`/admin/orders/${row.id}`)}
+                        >
+                          VIEW
+                        </button>
+                        <select
+                          className="w-full bg-[#111] border border-[#333] text-white font-sans px-1 py-1 text-xs focus:border-[var(--brand-yellow)] focus:outline-none"
+                          value={row.status}
+                          onChange={async (e) => {
+                            await apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value });
+                            await reload();
+                          }}
+                        >
+                          {statuses.map((status) => <option key={status}>{status}</option>)}
+                        </select>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {data.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-8 text-[var(--brand-gray)] font-bebas text-xl" colSpan={7}>
+                      No records found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-[#222]">
+            {data.map((row) => (
+              <div key={row.id} className="p-4 space-y-3">
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">ID</p>
+                  <p className="text-white font-sans text-sm break-all">{row.id}</p>
+                </div>
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">USER</p>
+                  <p className="text-white font-sans text-sm break-words">{row.customer?.name || `${row.firstName} ${row.lastName}`}</p>
+                </div>
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">PRODUCTS</p>
+                  <p className="text-white font-sans text-sm break-words">{row.items.length > 0 ? row.items.map((item) => item.name).join(", ") : "-"}</p>
+                </div>
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">TOTAL</p>
+                  <p className="text-white font-sans text-sm">{money(row.totalCents)}</p>
+                </div>
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">CREATED</p>
+                  <p className="text-white font-sans text-sm">{formatDateTime(row.createdAt)}</p>
+                </div>
+                <div className="grid grid-cols-[90px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">STATUS</p>
+                  <p className="text-white font-sans text-sm">{row.status}</p>
+                </div>
+                <div className="grid grid-cols-1 gap-2 pt-1">
+                  <button
+                    className={`${ghostClass} w-full text-xs py-2`}
+                    onClick={() => navigate(`/admin/orders/${row.id}`)}
+                  >
+                    VIEW
+                  </button>
+                  <select
+                    className="w-full bg-[#111] border border-[#333] text-white font-sans px-2 py-2 text-sm focus:border-[var(--brand-yellow)] focus:outline-none"
+                    value={row.status}
+                    onChange={async (e) => {
+                      await apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value });
+                      await reload();
+                    }}
+                  >
+                    {statuses.map((status) => <option key={status}>{status}</option>)}
+                  </select>
+                </div>
+              </div>
+            ))}
+            {data.length === 0 && (
+              <div className="px-4 py-8 text-[var(--brand-gray)] font-bebas text-xl">
+                No records found.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1060,47 +1205,78 @@ function AdminTable({
   actions?: (row: any) => React.ReactNode;
   formatCell?: (row: any, column: string, value: unknown) => React.ReactNode | undefined;
 }) {
+  const resolveCell = (row: any, column: string) =>
+    formatCell?.(row, column, row[column]) ??
+    (Array.isArray(row[column]) ? row[column].join(", ") : column.toLowerCase().includes("cents") ? money(row[column] ?? 0) : String(row[column] ?? ""));
+
   return (
-    <div className={`${panelClass} overflow-x-auto`}>
-      <table className="w-full table-fixed">
-        <thead>
-          <tr className="border-b border-[#222]">
-            {columns.map((column) => (
-              <th key={column} className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">
-                {column.toLowerCase() === "active" ? "STATUS" : column.toUpperCase()}
-              </th>
-            ))}
-            {actions && <th className="w-[190px] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">ACTIONS</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id ?? row.slug} className="border-b border-[#222]">
+    <div className={panelClass}>
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full table-fixed">
+          <thead>
+            <tr className="border-b border-[#222]">
               {columns.map((column) => (
-                <td key={column} className="px-3 py-3 text-white font-sans text-sm truncate">
-                  {formatCell?.(row, column, row[column]) ??
-                    (Array.isArray(row[column]) ? row[column].join(", ") : column.toLowerCase().includes("cents") ? money(row[column] ?? 0) : String(row[column] ?? ""))}
-                </td>
+                <th key={column} className="text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">
+                  {column.toLowerCase() === "active" ? "STATUS" : column.toUpperCase()}
+                </th>
               ))}
-              {actions && (
-                <td className="px-3 py-3 w-[190px]">
-                  <div className="flex gap-2 items-center flex-wrap">{actions(row)}</div>
-                </td>
-              )}
+              {actions && <th className="w-[190px] text-left text-[var(--brand-gray)] font-bebas tracking-widest px-3 py-3 text-xs md:text-sm">ACTIONS</th>}
             </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr><td className="px-4 py-8 text-[var(--brand-gray)] font-bebas text-xl" colSpan={columns.length + 1}>No records found.</td></tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id ?? row.slug} className="border-b border-[#222]">
+                {columns.map((column) => (
+                  <td key={column} className="px-3 py-3 text-white font-sans text-sm truncate">
+                    {resolveCell(row, column)}
+                  </td>
+                ))}
+                {actions && (
+                  <td className="px-3 py-3 w-[190px]">
+                    <div className="flex gap-2 items-center flex-wrap">{actions(row)}</div>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr><td className="px-4 py-8 text-[var(--brand-gray)] font-bebas text-xl" colSpan={columns.length + 1}>No records found.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden divide-y divide-[#222]">
+        {rows.map((row) => (
+          <div key={row.id ?? row.slug} className="p-4 space-y-3">
+            <div className="grid grid-cols-1 gap-2">
+              {columns.map((column) => (
+                <div key={column} className="grid grid-cols-[88px_1fr] gap-2 items-start">
+                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">
+                    {column.toLowerCase() === "active" ? "STATUS" : column.toUpperCase()}
+                  </p>
+                  <p className="text-white font-sans text-sm break-words">{resolveCell(row, column)}</p>
+                </div>
+              ))}
+            </div>
+            {actions && (
+              <div className="pt-1">
+                <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs mb-2">ACTIONS</p>
+                <div className="grid grid-cols-1 gap-2 [&>select]:w-full [&>button]:w-full">{actions(row)}</div>
+              </div>
+            )}
+          </div>
+        ))}
+        {rows.length === 0 && (
+          <div className="px-4 py-8 text-[var(--brand-gray)] font-bebas text-xl">No records found.</div>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function AdminPage() {
   const { section: sectionParam, orderId } = useParams<{ section?: string; orderId?: string }>();
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, isAuthLoading } = useAuth();
   const section = useMemo<AdminSection>(() => {
     if (orderId) return "orders";
     return sections.some((item) => item.id === sectionParam) ? (sectionParam as AdminSection) : "dashboard";
@@ -1127,6 +1303,16 @@ export default function AdminPage() {
       });
     });
   }, [isLoggedIn, user?.role]);
+
+  if (isAuthLoading) {
+    return (
+      <main className="w-full min-h-screen bg-[var(--brand-black)] pt-28 pb-20 px-6 md:px-12">
+        <div className="max-w-7xl mx-auto">
+          <p className="text-[var(--brand-gray)] font-bebas text-3xl">LOADING ADMIN...</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!isLoggedIn) return <Navigate to="/auth" replace state={{ from: "/admin", tab: "login" }} />;
   if (user?.role !== "admin") return <Navigate to="/account" replace />;

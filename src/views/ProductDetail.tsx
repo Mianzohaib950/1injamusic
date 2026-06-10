@@ -144,7 +144,11 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (!selectedSize) { setSizeError(true); return; }
-    addToCart(product, selectedSize, quantity);
+    const addedToCart = addToCart(product, selectedSize, quantity);
+    if (!addedToCart) {
+      navigate("/auth", { state: { from: `/shop/${product.id}`, tab: "login" } });
+      return;
+    }
     setAdded(true);
     setTimeout(() => setAdded(false), 2200);
   };

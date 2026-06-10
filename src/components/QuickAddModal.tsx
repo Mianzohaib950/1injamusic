@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Minus, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import type { MerchProduct } from "@/data/merch";
 
@@ -11,6 +12,7 @@ interface QuickAddModalProps {
 
 export default function QuickAddModal({ product, onClose }: QuickAddModalProps) {
   const { addToCart } = useCart();
+  const navigate = useNavigate();
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState(false);
@@ -21,7 +23,12 @@ export default function QuickAddModal({ product, onClose }: QuickAddModalProps) 
       setError(true);
       return;
     }
-    addToCart(product, selectedSize, quantity);
+    const addedToCart = addToCart(product, selectedSize, quantity);
+    if (!addedToCart) {
+      onClose();
+      navigate("/auth", { state: { from: "/shop", tab: "login" } });
+      return;
+    }
     onClose();
     setSelectedSize("");
     setQuantity(1);
