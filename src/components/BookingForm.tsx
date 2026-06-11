@@ -5,11 +5,13 @@ import { apiPost } from "@/lib/api";
 interface BookingFormProps {
   endpoint?: string;
   successMessage?: string;
+  artists?: string[];
 }
 
 export default function BookingForm({
   endpoint = "/bookings",
   successMessage = "Message sent! We will be in touch within 48 hours.",
+  artists = ["Hintell", "Dark Koko", "Swazz", "Mee$ch"],
 }: BookingFormProps) {
   const [formData, setFormData] = useState({
     name: "",
@@ -101,10 +103,9 @@ export default function BookingForm({
             onChange={e => setFormData({...formData, artist: e.target.value})}
           >
             <option>All Artists</option>
-            <option>Hintell</option>
-            <option>Dark Koko</option>
-            <option>Swazz</option>
-            <option>Mee$ch</option>
+            {artists.map((artist) => (
+              <option key={artist}>{artist}</option>
+            ))}
           </select>
         </div>
       </div>

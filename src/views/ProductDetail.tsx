@@ -182,13 +182,13 @@ export default function ProductDetail() {
 
       {/* Breadcrumb */}
       <div className="pt-28 pb-4 px-6 md:px-12 max-w-7xl mx-auto">
-        <nav className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+        <nav className="relative z-20 flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
           <Link to="/" className="hover:text-[var(--brand-yellow)] transition-colors">Home</Link>
           <ChevronRight size={14} />
           <Link to="/shop" className="hover:text-[var(--brand-yellow)] transition-colors">Shop</Link>
           <ChevronRight size={14} />
           <Link
-            to={`/shop?artist=${encodeURIComponent(product.artist)}`}
+            to={`/artists/${product.artistSlug}`}
             className="hover:text-[var(--brand-yellow)] transition-colors"
           >
             {product.artist}

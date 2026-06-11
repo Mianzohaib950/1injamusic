@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { cmsSections, getDb } from "@/lib/server/db";
+import { cmsSectionItems, cmsSections, getDb } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, noContent, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
@@ -55,7 +55,9 @@ export async function DELETE(
     await ensureServerSchema();
 
     const { id } = await context.params;
-    await getDb().delete(cmsSections).where(eq(cmsSections.id, id));
+    const db = getDb();
+    await db.delete(cmsSectionItems).where(eq(cmsSectionItems.sectionId, id));
+    await db.delete(cmsSections).where(eq(cmsSections.id, id));
     return noContent();
   } catch (error) {
     return serverError(error);

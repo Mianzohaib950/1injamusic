@@ -4,6 +4,7 @@ import { Globe, Mail, FileMusic, ArrowRight } from "lucide-react";
 import gsap from "gsap";
 import BookingForm from "@/components/BookingForm";
 import { ALL_EVENTS } from "@/data/events";
+import { artistProfiles, type ArtistProfile } from "@/data/artists";
 import { apiGet } from "@/lib/api";
 
 const splitText = (text: string) => {
@@ -69,7 +70,6 @@ function EventCardImage({
   index: number;
   defaultImageBySlug: Map<string, string>;
 }) {
-  const [loaded, setLoaded] = useState(false);
   const [sourceIndex, setSourceIndex] = useState(0);
 
   const sources = useMemo(() => {
@@ -83,7 +83,6 @@ function EventCardImage({
   }, [event.id, event.slug, event.image, event.baseImage, defaultImageBySlug]);
 
   useEffect(() => {
-    setLoaded(false);
     setSourceIndex(0);
   }, [event.slug, event.image, event.baseImage]);
 
@@ -96,14 +95,10 @@ function EventCardImage({
       loading={index < 8 ? "eager" : "lazy"}
       decoding="async"
       fetchPriority={index < 4 ? "high" : "auto"}
-      onLoad={() => setLoaded(true)}
       onError={() => {
-        setLoaded(false);
         setSourceIndex((current) => (current < sources.length - 1 ? current + 1 : current));
       }}
-      className={`absolute inset-0 w-full h-full object-cover brightness-50 group-hover:brightness-75 group-hover:scale-105 transition-all duration-300 ${
-        loaded ? "opacity-100" : "opacity-0"
-      }`}
+      className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:brightness-75 group-hover:scale-105 transition-all duration-300"
     />
   );
 }
@@ -116,7 +111,7 @@ export default function Events() {
   const [contentTitle, setContentTitle] = useState("UPCOMING & PAST EVENTS");
   const [contentImage, setContentImage] = useState("");
   const [cmsCards, setCmsCards] = useState<CmsEventCard[]>([]);
-  const [readyCmsImages, setReadyCmsImages] = useState<Record<string, boolean>>({});
+  const [artists, setArtists] = useState<ArtistProfile[]>(artistProfiles);
   const defaultImageBySlug = useMemo(
     () => new Map(ALL_EVENTS.map((event) => [event.slug, normalizeImageUrl(event.image)])),
     [],
@@ -134,6 +129,25 @@ export default function Events() {
         delay: 0.2
       });
     }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadArtists = async () => {
+      try {
+        const rows = await apiGet<ArtistProfile[]>("/artists");
+        if (!active) return;
+        if (Array.isArray(rows) && rows.length > 0) {
+          setArtists(rows.filter((artist) => artist.active !== false));
+        }
+      } catch {
+        // Keep bundled roster as fallback when API is unavailable.
+      }
+    };
+    loadArtists();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -198,32 +212,10 @@ export default function Events() {
       return {
         ...(base ?? {}),
         ...card,
-        image: readyCmsImages[card.slug] ? (cmsImage || baseImage) : (baseImage || cmsImage),
+        image: cmsImage || baseImage,
         baseImage,
       };
     });
-  }, [cmsCards, readyCmsImages]);
-
-  useEffect(() => {
-    if (cmsCards.length === 0) return;
-    let active = true;
-    cmsCards.forEach((card) => {
-      const url = normalizeImageUrl(card.image);
-      if (!url || readyCmsImages[card.slug]) return;
-      const probe = new Image();
-      probe.onload = () => {
-        if (!active) return;
-        setReadyCmsImages((current) => ({ ...current, [card.slug]: true }));
-      };
-      probe.onerror = () => {
-        if (!active) return;
-        setReadyCmsImages((current) => ({ ...current, [card.slug]: false }));
-      };
-      probe.src = url;
-    });
-    return () => {
-      active = false;
-    };
   }, [cmsCards]);
 
   const tags = useMemo(() => {
@@ -349,7 +341,11 @@ export default function Events() {
             <p className="text-[var(--brand-gray)] font-sans text-lg">Use the form below for fast response direct to our management team.</p>
           </div>
           <div className="bg-[var(--brand-card)] p-8 md:p-12 border border-[var(--brand-border)] rounded-xl">
-            <BookingForm endpoint="/event-contacts" successMessage="Event contact request sent. Our team will contact you shortly." />
+            <BookingForm
+              endpoint="/event-contacts"
+              successMessage="Event contact request sent. Our team will contact you shortly."
+              artists={artists.map((artist) => artist.name)}
+            />
           </div>
         </div>
       </section>

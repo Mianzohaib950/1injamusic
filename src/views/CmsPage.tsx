@@ -36,22 +36,57 @@ type CmsPageResponse = {
 
 export default function CmsPage() {
   const { pageKey = "" } = useParams<{ pageKey: string }>();
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `cms-page:${String(pageKey).toLowerCase()}`;
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return !window.sessionStorage.getItem(cacheKey);
+  });
   const [notFound, setNotFound] = useState(false);
-  const [data, setData] = useState<CmsPageResponse | null>(null);
+  const [data, setData] = useState<CmsPageResponse | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey);
+      return raw ? (JSON.parse(raw) as CmsPageResponse) : null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     let active = true;
-    const load = async () => {
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey);
+      if (raw) {
+        setData(JSON.parse(raw) as CmsPageResponse);
+        setLoading(false);
+      } else {
+        setData(null);
+        setLoading(true);
+      }
+    } catch {
+      setData(null);
       setLoading(true);
+    }
+
+    const load = async () => {
       setNotFound(false);
       try {
         const response = await apiGet<CmsPageResponse>(`/cms/${encodeURIComponent(pageKey)}`);
         if (!active) return;
         setData(response);
+        try {
+          window.sessionStorage.setItem(cacheKey, JSON.stringify(response));
+        } catch {
+          // Ignore storage failures.
+        }
       } catch (error: any) {
         if (!active) return;
         setData(null);
+        try {
+          window.sessionStorage.removeItem(cacheKey);
+        } catch {
+          // Ignore storage failures.
+        }
         setNotFound(Number(error?.status ?? 0) === 404);
       } finally {
         if (active) setLoading(false);
@@ -171,4 +206,3 @@ export default function CmsPage() {
     </main>
   );
 }
-

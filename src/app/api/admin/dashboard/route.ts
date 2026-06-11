@@ -30,6 +30,10 @@ export async function GET(request: Request) {
     const processingOrders = orderRows.filter((order: typeof orders.$inferSelect) => order.status === "Processing").length;
     const shippedOrders = orderRows.filter((order: typeof orders.$inferSelect) => order.status === "Shipped").length;
     const deliveredOrders = orderRows.filter((order: typeof orders.$inferSelect) => order.status === "Delivered").length;
+    const cancelledOrders = orderRows.filter((order: typeof orders.$inferSelect) => {
+      const status = String(order.status ?? "").toLowerCase();
+      return status === "cancelled" || status === "canceled";
+    }).length;
     const totalUnitsSold = orderItemRows.reduce(
       (sum: number, item: typeof orderItems.$inferSelect) => sum + item.quantity,
       0,
@@ -51,6 +55,7 @@ export async function GET(request: Request) {
         Processing: processingOrders,
         Shipped: shippedOrders,
         Delivered: deliveredOrders,
+        Cancelled: cancelledOrders,
       },
       recentOrders: orderRows
         .sort((a: typeof orders.$inferSelect, b: typeof orders.$inferSelect) => {

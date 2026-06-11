@@ -229,6 +229,25 @@ export default function Home() {
   const communitySection = getSection("community");
   const collaborateSection = getSection("collaborate");
   const footerSection = getSection("footer");
+  const fixedSectionKeys = new Set([
+    "hero",
+    "marquee",
+    "what_we_do",
+    "artists_preview",
+    "new_drops",
+    "featured_video",
+    "album_gallery",
+    "community",
+    "collaborate",
+    "footer",
+  ]);
+  const extraSections = useMemo(
+    () =>
+      cmsSections
+        .filter((section) => section.active !== false && !fixedSectionKeys.has(section.sectionKey))
+        .sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0)),
+    [cmsSections],
+  );
 
   const heroDescription = heroSection?.body || "Booking world-renowned and rising music artists, DJs, and producers out of Jamaica.";
   const heroCtaLabel = heroSection?.ctaLabel || "EXPLORE ARTISTS";
@@ -374,7 +393,7 @@ export default function Home() {
         {/* Bottom fade */}
         <div className="absolute inset-x-0 bottom-0 h-48 z-0 bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
 
-        <div className="relative z-10 text-center px-4 max-w-5xl mx-auto flex flex-col items-center">
+        <div className="relative z-10 text-center px-4 max-w-5xl mx-auto flex flex-col items-center pb-28 md:pb-24">
           <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[6.2rem] leading-[1.12] font-bebas">
             {splitText(heroLine1)}
           </h1>
@@ -397,7 +416,7 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center text-[var(--brand-yellow)] gap-2 z-10">
+        <div className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center text-[var(--brand-yellow)] gap-2 z-10">
           <span className="font-bebas tracking-widest text-sm opacity-60">SCROLL</span>
           <ChevronDown className="animate-bounce" />
         </div>
@@ -635,6 +654,59 @@ export default function Home() {
         </div>
 
       </section>
+
+      {extraSections.length > 0 && (
+        <section className="scroll-section py-20 px-6 md:px-12 max-w-7xl mx-auto space-y-10">
+          {extraSections.map((section) => {
+            const items = getActiveItems(section);
+            return (
+              <article key={section.id} className="border border-[var(--brand-border)] bg-[var(--brand-card)] p-6 md:p-8">
+                <p className="text-[var(--brand-yellow)] font-bebas tracking-widest text-sm mb-2">
+                  {section.sectionKey.replace(/_/g, " ").toUpperCase()}
+                </p>
+                {section.title && <h3 className="text-white text-3xl md:text-4xl font-bebas">{section.title}</h3>}
+                {section.subtitle && <p className="text-[var(--brand-yellow)] font-bebas tracking-widest mt-2">{section.subtitle}</p>}
+                {section.body && <p className="text-[var(--brand-gray)] font-sans mt-4 leading-relaxed">{section.body}</p>}
+                {section.imageUrl && (
+                  <img
+                    src={section.imageUrl}
+                    alt={section.title || section.sectionKey}
+                    loading="lazy"
+                    className="w-full max-h-[420px] object-cover border border-[var(--brand-border)] mt-6"
+                  />
+                )}
+                {items.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                    {items.map((item) => (
+                      <div key={item.id} className="border border-[var(--brand-border)] p-4 bg-[#111]">
+                        <h4 className="text-white font-bebas text-2xl">{item.title || item.itemKey}</h4>
+                        {item.subtitle && <p className="text-[var(--brand-yellow)] font-bebas tracking-widest mt-1">{item.subtitle}</p>}
+                        {item.description && <p className="text-[var(--brand-gray)] font-sans text-sm mt-3">{item.description}</p>}
+                        {item.imageUrl && (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.title || item.itemKey}
+                            loading="lazy"
+                            className="w-full h-52 object-cover border border-[var(--brand-border)] mt-4"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {section.ctaLabel && (
+                  <Link
+                    to={section.ctaUrl || "#"}
+                    className="inline-flex items-center gap-2 mt-6 px-6 py-2 border border-[var(--brand-yellow)] text-[var(--brand-yellow)] font-bebas tracking-widest hover:bg-[var(--brand-yellow)] hover:text-black transition-colors"
+                  >
+                    {section.ctaLabel}
+                  </Link>
+                )}
+              </article>
+            );
+          })}
+        </section>
+      )}
 
       {/* FOOTER */}
       <footer className="bg-[var(--brand-dark)] border-t border-[var(--brand-border)] pt-24 pb-8 px-6 md:px-12 border-b-4 border-b-[var(--brand-yellow)]">

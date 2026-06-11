@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import BookingForm from "@/components/BookingForm";
 import { Link } from "react-router-dom";
 import { apiGet } from "@/lib/api";
+import { artistProfiles, type ArtistProfile } from "@/data/artists";
 
 export default function Booking() {
-  const artists = ["hintell", "dark-koko", "swazz", "meesch"];
+  const [artists, setArtists] = useState<ArtistProfile[]>(artistProfiles);
   const [heroTitle, setHeroTitle] = useState("BOOK AN ARTIST");
   const [heroBody, setHeroBody] = useState("From club nights to international festivals we make it happen.");
   const [heroImage, setHeroImage] = useState("/booking-banner.jpg");
@@ -53,6 +54,25 @@ export default function Booking() {
       }
     };
     loadCms();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadArtists = async () => {
+      try {
+        const rows = await apiGet<ArtistProfile[]>("/artists");
+        if (!active) return;
+        if (Array.isArray(rows) && rows.length > 0) {
+          setArtists(rows.filter((artist) => artist.active !== false));
+        }
+      } catch {
+        // Keep bundled roster as fallback when API is unavailable.
+      }
+    };
+    loadArtists();
     return () => {
       active = false;
     };
@@ -127,7 +147,7 @@ export default function Booking() {
             <p className="text-[var(--brand-gray)] font-sans">All fields are required. Please provide as much detail as possible about your event.</p>
           </div>
           <div className="bg-[var(--brand-card)] p-8 md:p-10 border border-[var(--brand-border)] rounded-xl shadow-2xl">
-            <BookingForm />
+            <BookingForm artists={artists.map((artist) => artist.name)} />
           </div>
         </div>
 
@@ -136,18 +156,18 @@ export default function Booking() {
           <div className="flex flex-col gap-4">
             {artists.map((artist) => (
               <Link 
-                key={artist}
-                to={`/artists/${artist}`}
+                key={artist.slug}
+                to={`/artists/${artist.slug}`}
                 className="flex items-center gap-4 p-4 border border-[var(--brand-border)] bg-[var(--brand-card)] hover:border-[var(--brand-yellow)] transition-colors group"
               >
                 <img 
-                  src={`/${artist === 'dark-koko' ? 'dark-koko' : artist}.jpg`}
-                  alt={artist}
+                  src={artist.image || "/logo-1jamaica.png"}
+                  alt={artist.name}
                   className="w-16 h-16 object-cover brightness-75 group-hover:brightness-100 rounded-sm"
                 />
                 <div>
                   <h4 className="text-white font-bebas text-2xl group-hover:text-[var(--brand-yellow)] transition-colors">
-                    {artist.replace('-', ' ').toUpperCase()}
+                    {artist.name}
                   </h4>
                   <span className="text-[var(--brand-gray)] font-sans text-sm">View Profile →</span>
                 </div>

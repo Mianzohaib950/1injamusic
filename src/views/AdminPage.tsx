@@ -42,7 +42,7 @@ const panelClass = "bg-[#161616] border border-[#222]";
 const actionClass =
   "inline-flex items-center justify-center gap-2 bg-[var(--brand-yellow)] text-black font-bebas tracking-widest px-4 py-2 hover:bg-white transition-colors disabled:opacity-50";
 const ghostClass =
-  "inline-flex items-center justify-center gap-2 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-4 py-2 hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
+  "inline-flex items-center justify-center gap-2 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-4 py-2  h-9 hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
 const ADMIN_CACHE_TTL_MS = 60_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
@@ -212,6 +212,17 @@ function StatusText({ loading, error }: { loading: boolean; error: string }) {
 
 function Dashboard() {
   const { data, loading, error } = useAdminData<any>("/admin/dashboard", null);
+  const statusEntries = useMemo(() => {
+    const byStatus = (data?.ordersByStatus ?? {}) as Record<string, number>;
+    return [
+      ["Pending", Number(byStatus.Pending ?? 0)],
+      ["Processing", Number(byStatus.Processing ?? 0)],
+      ["Shipped", Number(byStatus.Shipped ?? 0)],
+      ["Delivered", Number(byStatus.Delivered ?? 0)],
+      ["Cancelled", Number(byStatus.Cancelled ?? byStatus.Canceled ?? 0)],
+    ] as [string, number][];
+  }, [data]);
+
   const cards = data
     ? [
         ["USERS", data.totals.users],
@@ -240,8 +251,8 @@ function Dashboard() {
           </div>
           <div className={`${panelClass} p-5`}>
             <h3 className="text-white font-bebas text-2xl mb-4">ORDER STATUS</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {Object.entries(data.ordersByStatus).map(([status, count]) => (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {statusEntries.map(([status, count]) => (
                 <div key={status} className="bg-[#111] border border-[#222] p-4">
                   <p className="text-[var(--brand-gray)] font-bebas tracking-widest">{status}</p>
                   <p className="text-white font-bebas text-3xl">{String(count)}</p>
@@ -391,12 +402,26 @@ function ArtistsPanel() {
   const [form, setForm] = useState<any>(blank);
   const [editingSlug, setEditingSlug] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [artistImageFileName, setArtistImageFileName] = useState("");
+
+  const pickArtistImage = (file?: File) => {
+    if (!file) return;
+    setArtistImageFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setForm((current: any) => ({ ...current, image: result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const save = async () => {
     const payload = { ...form, genres: String(form.genres).split(",").map((item) => item.trim()).filter(Boolean), sortOrder: Number(form.sortOrder) };
     if (editingSlug) await apiPut(`/admin/artists/${editingSlug}`, payload);
     else await apiPost("/admin/artists", payload);
     setForm(blank);
     setEditingSlug("");
+    setArtistImageFileName("");
     setShowForm(false);
     await reload();
   };
@@ -404,12 +429,14 @@ function ArtistsPanel() {
   const startAddArtist = () => {
     setForm(blank);
     setEditingSlug("");
+    setArtistImageFileName("");
     setShowForm(true);
   };
 
   const cancelArtistForm = () => {
     setForm(blank);
     setEditingSlug("");
+    setArtistImageFileName("");
     setShowForm(false);
   };
 
@@ -427,11 +454,45 @@ function ArtistsPanel() {
         )}
       </div>
       {showForm && (
-        <SimpleForm fields={["slug", "name", "genres", "bio", "image", "bookingEmail", "sortOrder"]} form={form} setForm={setForm} onSave={save} saveLabel={editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"} disabledId={!!editingSlug ? "slug" : ""} />
+        <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
+          {["slug", "name", "genres", "bio", "image", "bookingEmail", "sortOrder"].map((key) => (
+            key === "image" ? (
+              <div key={key} className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
+                <input
+                  className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
+                  placeholder={artistImageFileName ? `Image: ${artistImageFileName}` : "Image"}
+                  value={form.image ?? ""}
+                  onChange={(e) => {
+                    setArtistImageFileName("");
+                    setForm({ ...form, image: e.target.value });
+                  }}
+                />
+                <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
+                  Choose
+                  <input className="hidden" type="file" accept="image/*" onChange={(e) => pickArtistImage(e.target.files?.[0])} />
+                </label>
+              </div>
+            ) : (
+              <input
+                key={key}
+                className={inputClass}
+                placeholder={toDisplayLabel(key)}
+                value={form[key] ?? ""}
+                disabled={key === "slug" && !!editingSlug}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+              />
+            )
+          ))}
+          <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+            <input type="checkbox" checked={form.active ?? true} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+            Active
+          </label>
+          <button className={actionClass} onClick={save}><Save size={16} /> {editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"}</button>
+        </div>
       )}
       <AdminTable rows={data} columns={["name", "slug", "genres", "active"]} formatCell={(_, column, value) => column === "active" ? (value ? "Active" : "Inactive") : undefined} actions={(row) => (
         <>
-          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setShowForm(true); }}>EDIT</button>
+          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setArtistImageFileName(""); setShowForm(true); }}>EDIT</button>
           <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/artists/${row.slug}`); await reload(); }}><Trash2 size={14} /></button>
         </>
       )} />
@@ -482,7 +543,7 @@ type CmsSection = {
 
 function CmsPanel() {
   const protectedPageKeys = new Set(["home", "artists", "shop", "events", "booking"]);
-  const compactActionClass = "inline-flex items-center justify-center gap-1 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-1 text-xs hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
+  const compactActionClass = "inline-flex items-center justify-center gap-1 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-1 h-7  text-xs hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
   const { data: pages, loading: pagesLoading, error: pagesError, reload: reloadPages } = useAdminData<CmsPage[]>("/admin/cms/pages", []);
   const [selectedPageKey, setSelectedPageKey] = useState("home");
   const [editingPageId, setEditingPageId] = useState("");
@@ -493,6 +554,11 @@ function CmsPanel() {
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [newPageKey, setNewPageKey] = useState("");
   const [newPageTitle, setNewPageTitle] = useState("");
+  const [showPageForm, setShowPageForm] = useState(false);
+  const [showSectionForm, setShowSectionForm] = useState(false);
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [sectionImageFileName, setSectionImageFileName] = useState("");
+  const [itemImageFileName, setItemImageFileName] = useState("");
   const [sectionForm, setSectionForm] = useState({
     sectionKey: "",
     sectionType: "content",
@@ -519,6 +585,22 @@ function CmsPanel() {
     active: true,
   });
 
+  const pickCmsImage = (target: "section" | "item", file?: File) => {
+    if (!file) return;
+    if (target === "section") setSectionImageFileName(file.name);
+    if (target === "item") setItemImageFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (target === "section") {
+        setSectionForm((current) => ({ ...current, imageUrl: result }));
+      } else {
+        setItemForm((current) => ({ ...current, imageUrl: result }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   useEffect(() => {
     if (!selectedPageKey && pages.length > 0) {
       setSelectedPageKey(pages[0].pageKey);
@@ -543,14 +625,31 @@ function CmsPanel() {
     await apiPost("/admin/cms/pages", { pageKey, title: title || pageKey, active: true });
     setNewPageKey("");
     setNewPageTitle("");
+    setShowPageForm(false);
     await reloadPages();
     setSelectedPageKey(pageKey);
+  };
+
+  const startAddPage = () => {
+    setEditingPageId("");
+    setPageEditTitle("");
+    setPageEditActive(true);
+    setNewPageKey("");
+    setNewPageTitle("");
+    setShowPageForm(true);
+  };
+
+  const cancelPageForm = () => {
+    setNewPageKey("");
+    setNewPageTitle("");
+    setShowPageForm(false);
   };
 
   const startEditPage = (page: CmsPage) => {
     setEditingPageId(page.id);
     setPageEditTitle(page.title);
     setPageEditActive(page.active);
+    setShowPageForm(false);
   };
 
   const savePage = async () => {
@@ -562,6 +661,7 @@ function CmsPanel() {
     setEditingPageId("");
     setPageEditTitle("");
     setPageEditActive(true);
+    setShowPageForm(false);
     await reloadPages();
   };
 
@@ -574,6 +674,42 @@ function CmsPanel() {
       setSelectedSectionId("");
       setEditingSectionId("");
     }
+  };
+
+  const startAddSection = () => {
+    setEditingSectionId("");
+    setSectionForm({
+      sectionKey: "",
+      sectionType: "content",
+      title: "",
+      subtitle: "",
+      body: "",
+      imageUrl: "",
+      videoUrl: "",
+      ctaLabel: "",
+      ctaUrl: "",
+      active: true,
+    });
+    setSectionImageFileName("");
+    setShowSectionForm(true);
+  };
+
+  const cancelSectionForm = () => {
+    setEditingSectionId("");
+    setSectionForm({
+      sectionKey: "",
+      sectionType: "content",
+      title: "",
+      subtitle: "",
+      body: "",
+      imageUrl: "",
+      videoUrl: "",
+      ctaLabel: "",
+      ctaUrl: "",
+      active: true,
+    });
+    setSectionImageFileName("");
+    setShowSectionForm(false);
   };
 
   const saveSection = async () => {
@@ -600,7 +736,45 @@ function CmsPanel() {
       ctaUrl: "",
       active: true,
     });
+    setSectionImageFileName("");
+    setShowSectionForm(false);
     await reload();
+  };
+
+  const startAddItem = () => {
+    setEditingItemId("");
+    setItemForm({
+      itemKey: "",
+      title: "",
+      subtitle: "",
+      description: "",
+      imageUrl: "",
+      videoUrl: "",
+      linkLabel: "",
+      linkUrl: "",
+      tags: "",
+      active: true,
+    });
+    setItemImageFileName("");
+    setShowItemForm(true);
+  };
+
+  const cancelItemForm = () => {
+    setEditingItemId("");
+    setItemForm({
+      itemKey: "",
+      title: "",
+      subtitle: "",
+      description: "",
+      imageUrl: "",
+      videoUrl: "",
+      linkLabel: "",
+      linkUrl: "",
+      tags: "",
+      active: true,
+    });
+    setItemImageFileName("");
+    setShowItemForm(false);
   };
 
   const saveItem = async () => {
@@ -627,13 +801,15 @@ function CmsPanel() {
       tags: "",
       active: true,
     });
+    setItemImageFileName("");
+    setShowItemForm(false);
     await reload();
   };
 
   return (
     <CrudLayout title="CMS" loading={loading || pagesLoading} error={error || pagesError}>
       <div className={`${panelClass} p-5 mb-6`}>
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_220px_220px_auto] gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
           <label className="text-[var(--brand-gray)] font-sans text-sm">
             Page
             <select className={`${inputClass} mt-2`} value={selectedPageKey} onChange={(e) => { setSelectedPageKey(e.target.value); setEditingSectionId(""); setSelectedSectionId(""); }}>
@@ -642,10 +818,19 @@ function CmsPanel() {
               ))}
             </select>
           </label>
-          <input className={inputClass} placeholder="New Page Key" value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
-          <input className={inputClass} placeholder="New Page Title" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
-          <button className={actionClass} onClick={addPage}><Save size={16} /> ADD PAGE</button>
+          {!showPageForm ? (
+            <button className={actionClass} onClick={startAddPage}><Save size={16} /> ADD PAGE</button>
+          ) : (
+            <button className={ghostClass} onClick={cancelPageForm}>CANCEL</button>
+          )}
         </div>
+        {showPageForm && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+            <input className={inputClass} placeholder="New Page Key" value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
+            <input className={inputClass} placeholder="New Page Title" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
+            <button className={actionClass} onClick={addPage}><Save size={16} /> SAVE PAGE</button>
+          </div>
+        )}
         <div className="mt-4">
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[620px]">
@@ -722,22 +907,46 @@ function CmsPanel() {
         )}
       </div>
 
-      <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
-        <input className={inputClass} placeholder="Section Key" value={sectionForm.sectionKey} onChange={(e) => setSectionForm({ ...sectionForm, sectionKey: e.target.value })} disabled={!!editingSectionId} />
-        <input className={inputClass} placeholder="Section Type" value={sectionForm.sectionType} onChange={(e) => setSectionForm({ ...sectionForm, sectionType: e.target.value })} />
-        <input className={inputClass} placeholder="Title" value={sectionForm.title} onChange={(e) => setSectionForm({ ...sectionForm, title: e.target.value })} />
-        <input className={inputClass} placeholder="Subtitle" value={sectionForm.subtitle} onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })} />
-        <input className={inputClass} placeholder="Image URL" value={sectionForm.imageUrl} onChange={(e) => setSectionForm({ ...sectionForm, imageUrl: e.target.value })} />
-        <input className={inputClass} placeholder="Video URL" value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
-        <input className={inputClass} placeholder="CTA Label" value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
-        <input className={inputClass} placeholder="CTA URL" value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
-        <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
-          <input type="checkbox" checked={sectionForm.active} onChange={(e) => setSectionForm({ ...sectionForm, active: e.target.checked })} />
-          Active
-        </label>
-        <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
-        <button className={actionClass} onClick={saveSection}><Save size={16} /> {editingSectionId ? "UPDATE" : "ADD"} SECTION</button>
+      <div className="mb-6 flex items-center justify-end gap-3">
+        {!showSectionForm ? (
+          <button className={actionClass} onClick={startAddSection}><Save size={16} /> ADD SECTION</button>
+        ) : (
+          <button className={ghostClass} onClick={cancelSectionForm}>CANCEL</button>
+        )}
       </div>
+
+      {showSectionForm && (
+        <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
+          <input className={inputClass} placeholder="Section Key" value={sectionForm.sectionKey} onChange={(e) => setSectionForm({ ...sectionForm, sectionKey: e.target.value })} disabled={!!editingSectionId} />
+          <input className={inputClass} placeholder="Section Type" value={sectionForm.sectionType} onChange={(e) => setSectionForm({ ...sectionForm, sectionType: e.target.value })} />
+          <input className={inputClass} placeholder="Title" value={sectionForm.title} onChange={(e) => setSectionForm({ ...sectionForm, title: e.target.value })} />
+          <input className={inputClass} placeholder="Subtitle" value={sectionForm.subtitle} onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })} />
+          <div className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
+            <input
+              className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
+              placeholder={sectionImageFileName ? `Image: ${sectionImageFileName}` : "Image"}
+              value={sectionForm.imageUrl}
+              onChange={(e) => {
+                setSectionImageFileName("");
+                setSectionForm({ ...sectionForm, imageUrl: e.target.value });
+              }}
+            />
+            <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
+              Choose
+              <input className="hidden" type="file" accept="image/*" onChange={(e) => pickCmsImage("section", e.target.files?.[0])} />
+            </label>
+          </div>
+          <input className={inputClass} placeholder="Video URL" value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
+          <input className={inputClass} placeholder="CTA Label" value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
+          <input className={inputClass} placeholder="CTA URL" value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
+          <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+            <input type="checkbox" checked={sectionForm.active} onChange={(e) => setSectionForm({ ...sectionForm, active: e.target.checked })} />
+            Active
+          </label>
+          <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
+          <button className={actionClass} onClick={saveSection}><Save size={16} /> {editingSectionId ? "UPDATE" : "ADD"} SECTION</button>
+        </div>
+      )}
 
       <AdminTable
         rows={data}
@@ -767,7 +976,9 @@ function CmsPanel() {
                 ctaUrl: row.ctaUrl,
                 active: row.active ?? true,
               });
+              setSectionImageFileName("");
               setSelectedSectionId(row.id);
+              setShowSectionForm(true);
             }}>EDIT</button>
             <button className={compactActionClass} onClick={() => setSelectedSectionId(row.id)}>ITEMS</button>
             <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/sections/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
@@ -780,22 +991,45 @@ function CmsPanel() {
         {!currentSection && <p className="text-[var(--brand-gray)] font-sans">Select a section to manage its items.</p>}
         {currentSection && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-              <input className={inputClass} placeholder="Item Key" value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
-              <input className={inputClass} placeholder="Title" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
-              <input className={inputClass} placeholder="Subtitle" value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
-              <input className={inputClass} placeholder="Image URL" value={itemForm.imageUrl} onChange={(e) => setItemForm({ ...itemForm, imageUrl: e.target.value })} />
-              <input className={inputClass} placeholder="Video URL" value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
-              <input className={inputClass} placeholder="Link Label" value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
-              <input className={inputClass} placeholder="Link URL" value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
-              <input className={inputClass} placeholder="Tags (comma separated)" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
-              <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
-                <input type="checkbox" checked={itemForm.active} onChange={(e) => setItemForm({ ...itemForm, active: e.target.checked })} />
-                Active
-              </label>
-              <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
-              <button className={actionClass} onClick={saveItem}><Save size={16} /> {editingItemId ? "UPDATE" : "ADD"} ITEM</button>
+            <div className="mb-6 flex items-center justify-end gap-3">
+              {!showItemForm ? (
+                <button className={actionClass} onClick={startAddItem}><Save size={16} /> ADD ITEM</button>
+              ) : (
+                <button className={ghostClass} onClick={cancelItemForm}>CANCEL</button>
+              )}
             </div>
+            {showItemForm && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                <input className={inputClass} placeholder="Item Key" value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
+                <input className={inputClass} placeholder="Title" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
+                <input className={inputClass} placeholder="Subtitle" value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
+                <div className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
+                  <input
+                    className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
+                    placeholder={itemImageFileName ? `Image: ${itemImageFileName}` : "Image"}
+                    value={itemForm.imageUrl}
+                    onChange={(e) => {
+                      setItemImageFileName("");
+                      setItemForm({ ...itemForm, imageUrl: e.target.value });
+                    }}
+                  />
+                  <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
+                    Choose
+                    <input className="hidden" type="file" accept="image/*" onChange={(e) => pickCmsImage("item", e.target.files?.[0])} />
+                  </label>
+                </div>
+                <input className={inputClass} placeholder="Video URL" value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
+                <input className={inputClass} placeholder="Link Label" value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
+                <input className={inputClass} placeholder="Link URL" value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
+                <input className={inputClass} placeholder="Tags (comma separated)" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
+                <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+                  <input type="checkbox" checked={itemForm.active} onChange={(e) => setItemForm({ ...itemForm, active: e.target.checked })} />
+                  Active
+                </label>
+                <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
+                <button className={actionClass} onClick={saveItem}><Save size={16} /> {editingItemId ? "UPDATE" : "ADD"} ITEM</button>
+              </div>
+            )}
 
             <AdminTable
               rows={currentSection.items ?? []}
@@ -825,6 +1059,8 @@ function CmsPanel() {
                       tags: Array.isArray(row.tags) ? row.tags.join(",") : "",
                       active: row.active ?? true,
                     });
+                    setItemImageFileName("");
+                    setShowItemForm(true);
                   }}>EDIT</button>
                   <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/items/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
                 </>
@@ -1254,7 +1490,15 @@ function AdminTable({
                   <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">
                     {column.toLowerCase() === "active" ? "STATUS" : column.toUpperCase()}
                   </p>
-                  <p className="text-white font-sans text-sm break-words">{resolveCell(row, column)}</p>
+                  <p
+                    className={`text-white font-sans text-sm ${
+                      column.toLowerCase().includes("email") || column.toLowerCase().includes("id")
+                        ? "break-all"
+                        : "break-words"
+                    }`}
+                  >
+                    {resolveCell(row, column)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1304,7 +1548,7 @@ export default function AdminPage() {
     });
   }, [isLoggedIn, user?.role]);
 
-  if (isAuthLoading) {
+  if (!user && isAuthLoading) {
     return (
       <main className="w-full min-h-screen bg-[var(--brand-black)] pt-28 pb-20 px-6 md:px-12">
         <div className="max-w-7xl mx-auto">
@@ -1314,7 +1558,7 @@ export default function AdminPage() {
     );
   }
 
-  if (!isLoggedIn) return <Navigate to="/auth" replace state={{ from: "/admin", tab: "login" }} />;
+  if (!user && !isLoggedIn) return <Navigate to="/auth" replace state={{ from: "/admin", tab: "login" }} />;
   if (user?.role !== "admin") return <Navigate to="/account" replace />;
 
   const content = {

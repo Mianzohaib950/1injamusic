@@ -12,18 +12,28 @@ declare global {
 }
 
 function getConnectionString() {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL?.trim();
   if (!connectionString) {
     throw new Error("DATABASE_URL must be set.");
   }
   return connectionString;
 }
 
+function shouldUseSsl(connectionString: string) {
+  return !(
+    connectionString.includes("localhost") ||
+    connectionString.includes("127.0.0.1")
+  );
+}
+
 export function getPool() {
   if (!globalThis.__dbPool) {
+    const connectionString = getConnectionString();
     globalThis.__dbPool = new Pool({
-      connectionString: getConnectionString(),
-      connectionTimeoutMillis: 3000,
+      connectionString,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+      ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
     });
   }
   return globalThis.__dbPool;

@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { cmsPages, getDb } from "@/lib/server/db";
+import { eq, inArray } from "drizzle-orm";
+import { cmsPages, cmsSectionItems, cmsSections, getDb } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, noContent, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
@@ -50,6 +50,15 @@ export async function DELETE(
     const protectedPages = new Set(["home", "artists", "shop", "events", "booking"]);
     if (protectedPages.has(page.pageKey)) {
       return apiError(`Cannot delete protected page: ${page.pageKey}`, 400);
+    }
+    const sectionRows = await db
+      .select({ id: cmsSections.id })
+      .from(cmsSections)
+      .where(eq(cmsSections.pageId, id));
+    const sectionIds = sectionRows.map((section: { id: string }) => section.id);
+    if (sectionIds.length > 0) {
+      await db.delete(cmsSectionItems).where(inArray(cmsSectionItems.sectionId, sectionIds));
+      await db.delete(cmsSections).where(eq(cmsSections.pageId, id));
     }
     await db.delete(cmsPages).where(eq(cmsPages.id, id));
     return noContent();
