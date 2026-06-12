@@ -363,9 +363,9 @@ export default function Home() {
     <main className="w-full bg-[var(--brand-black)] overflow-hidden">
       
       {/* HERO SECTION */}
-      <section 
+      <section
         ref={heroRef}
-        className="relative h-screen w-full flex flex-col items-center justify-center pt-28 md:pt-32 overflow-hidden"
+        className="relative h-screen w-full flex flex-col items-center justify-center pt-32 md:pt-36 overflow-hidden"
       >
         {/* Photo background */}
         <div
@@ -393,35 +393,35 @@ export default function Home() {
         {/* Bottom fade */}
         <div className="absolute inset-x-0 bottom-0 h-48 z-0 bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
 
-        <div className="relative z-10 text-center px-4 max-w-5xl mx-auto flex flex-col items-center pb-20 md:pb-16">
-          <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[6.2rem] leading-[1.12] font-bebas">
+        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto flex flex-col items-center pb-16 md:pb-14">
+          <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
             {splitText(heroLine1)}
           </h1>
-          <h1 ref={heroTextRef2} className="text-white text-4xl md:text-6xl lg:text-[6.2rem] leading-[1.12] font-bebas">
+          <h1 ref={heroTextRef2} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
             {splitText(`${heroLine2} `)}<span className="border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight2)}</span>
           </h1>
-          <h1 ref={heroTextRef3} className="text-white text-4xl md:text-6xl lg:text-[6.2rem] leading-[1.12] font-bebas">
+          <h1 ref={heroTextRef3} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
             {splitText(`${heroLine3} `)}<span className="border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight3)}</span>
           </h1>
-          
-          <p className="mt-8 text-[var(--brand-gray)] text-lg md:text-xl font-sans max-w-2xl">
+
+          <p className="mt-6 text-[var(--brand-gray)] text-lg md:text-xl font-sans max-w-2xl">
             {heroDescription}
           </p>
 
-          <div className="mt-12  flex flex-col items-center text-[var(--brand-yellow)] gap-2">
+          <div className="mt-6 flex flex-col items-center text-[var(--brand-yellow)] gap-2">
             <span className="font-bebas tracking-widest text-sm opacity-60">SCROLL</span>
             <ChevronDown className="animate-bounce" />
           </div>
 
-          <Link 
+          <Link
             to={heroCtaUrl}
-            className="mt-6 md:mt-8 inline-flex items-center gap-2 px-8 py-3 rounded-full border-2 border-[var(--brand-yellow)] text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest hover:bg-[var(--brand-yellow)] hover:text-black transition-colors group hero-cta-glow"
+            className="mt-4 md:mt-5 inline-flex items-center gap-2 px-8 py-3 rounded-full border-2 border-[var(--brand-yellow)] text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest hover:bg-[var(--brand-yellow)] hover:text-black transition-colors group hero-cta-glow"
           >
             {heroCtaLabel} <ArrowRight className="group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
 
-        <div className="absolute bottom-6 left-0 right-0 h-14 pointer-events-none bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-14 pointer-events-none bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
       </section>
 
             {/* MARQUEE */}

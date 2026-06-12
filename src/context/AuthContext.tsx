@@ -89,6 +89,8 @@ interface AuthContextType {
   refreshWishlist: () => Promise<void>;
   isWishlisted: (productId: string) => boolean;
   toggleWishlist: (productId: string) => Promise<boolean | null>;
+  isWishlistOpen: boolean;
+  setWishlistOpen: (open: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -129,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [isWishlistOpen, setWishlistOpen] = useState(false);
 
   const refreshAddresses = async () => {
     try {
@@ -190,6 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSavedAddresses([]);
         setOrders([]);
         setWishlistItems([]);
+        setWishlistOpen(false);
       }
     } finally {
       setIsAuthLoading(false);
@@ -233,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSavedAddresses([]);
     setOrders([]);
     setWishlistItems([]);
+    setWishlistOpen(false);
     localStorage.removeItem("1jm_token");
     localStorage.removeItem("1nja_cart");
     localStorage.removeItem(USER_CACHE_KEY);
@@ -339,6 +344,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshWishlist,
         isWishlisted,
         toggleWishlist,
+        isWishlistOpen,
+        setWishlistOpen,
       }}
     >
       {children}

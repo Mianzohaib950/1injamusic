@@ -19,7 +19,7 @@ export default function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const { totalItems, setCartOpen } = useCart();
-  const { isLoggedIn, user, logout, wishlistItems } = useAuth();
+  const { isLoggedIn, user, logout, wishlistItems, setWishlistOpen } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -109,13 +109,7 @@ export default function Navigation() {
     navigate("/");
   };
 
-  const handleWishlistClick = () => {
-    if (user?.role === "admin") {
-      navigate("/admin");
-      return;
-    }
-    navigate("/account?tab=wishlist");
-  };
+  const handleWishlistClick = () => setWishlistOpen(true);
 
   return (
     <>

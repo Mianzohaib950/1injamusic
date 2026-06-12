@@ -13,6 +13,7 @@ import CustomCursor from "@/components/CustomCursor";
 import GrainOverlay from "@/components/GrainOverlay";
 import Navigation from "@/components/Navigation";
 import CartDrawer from "@/components/CartDrawer";
+import WishlistDrawer from "@/components/WishlistDrawer";
 import Loader from "@/components/Loader";
 
 import Home from "@/views/Home";
@@ -56,6 +57,7 @@ function App() {
               <GrainOverlay />
               <Navigation />
               <CartDrawer />
+              <WishlistDrawer />
               <AnimatePresence mode="wait">
                 <Routes>
                   <Route path="/" element={<Home />} />
