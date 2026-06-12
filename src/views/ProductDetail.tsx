@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { MerchProduct } from "@/data/merch";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
 import { getCachedProducts, loadProductsCatalog } from "@/lib/productCatalogClient";
@@ -32,6 +33,7 @@ export default function ProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { isLoggedIn, isWishlisted, toggleWishlist } = useAuth();
   const [products, setProducts] = useState<MerchProduct[]>(() => getCachedProducts() ?? []);
   const [productsLoading, setProductsLoading] = useState(() => !getCachedProducts());
   const product = products.find((item) => item.id === (productId ?? ""));
@@ -42,7 +44,6 @@ export default function ProductDetail() {
   const [added, setAdded] = useState(false);
   const [quickProduct, setQuickProduct] = useState<MerchProduct | null>(null);
   const [mainImageFailed, setMainImageFailed] = useState(false);
-  const [wishlistActive, setWishlistActive] = useState(false);
 
   const heroRef = useRef<HTMLDivElement>(null);
   const relatedRef = useRef<HTMLDivElement>(null);
@@ -154,8 +155,17 @@ export default function ProductDetail() {
   };
 
   const handleWishlist = () => {
-    setWishlistActive((value) => !value);
-    toast.success(wishlistActive ? "Removed from wishlist" : "Added to wishlist");
+    if (!isLoggedIn) {
+      navigate("/auth", { state: { from: `/shop/${product.id}`, tab: "login" } });
+      return;
+    }
+    toggleWishlist(product.id).then((active) => {
+      if (active == null) {
+        toast.error("Unable to update wishlist");
+        return;
+      }
+      toast.success(active ? "Added to wishlist" : "Removed from wishlist");
+    });
   };
 
   const handleShare = async () => {
@@ -346,7 +356,7 @@ export default function ProductDetail() {
 
             {/* Share / Wishlist */}
             <div className="pd-reveal flex items-center gap-4">
-              <button onClick={handleWishlist} className={`flex items-center gap-2 font-sans text-sm transition-colors ${wishlistActive ? "text-[var(--brand-yellow)]" : "text-[var(--brand-gray)] hover:text-[var(--brand-yellow)]"}`}>
+              <button onClick={handleWishlist} className={`flex items-center gap-2 font-sans text-sm transition-colors ${isWishlisted(product.id) ? "text-[var(--brand-yellow)]" : "text-[var(--brand-gray)] hover:text-[var(--brand-yellow)]"}`}>
                 <Heart size={16} /> Wishlist
               </button>
               <button onClick={handleShare} className="flex items-center gap-2 text-[var(--brand-gray)] hover:text-[var(--brand-yellow)] font-sans text-sm transition-colors">

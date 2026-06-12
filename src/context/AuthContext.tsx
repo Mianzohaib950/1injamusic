@@ -46,6 +46,28 @@ export interface Order {
   shippingAddress: Omit<SavedAddress, "id" | "label" | "isDefault">;
 }
 
+export interface WishlistItem {
+  id: string;
+  userId: string;
+  productId: string;
+  createdAt: string;
+  product: {
+    id: string;
+    name: string;
+    artist: string;
+    artistSlug: string;
+    category: string;
+    price: number;
+    originalPrice: number | null;
+    image: string;
+    imageHover: string;
+    description: string;
+    badge: string | null;
+    sizes: string[];
+    inStock: boolean;
+  } | null;
+}
+
 interface AuthContextType {
   user: UserProfile | null;
   isLoggedIn: boolean;
@@ -63,6 +85,10 @@ interface AuthContextType {
   orders: Order[];
   refreshOrders: () => Promise<void>;
   addOrder: (order: Omit<Order, "id" | "createdAt" | "status">) => Promise<void>;
+  wishlistItems: WishlistItem[];
+  refreshWishlist: () => Promise<void>;
+  isWishlisted: (productId: string) => boolean;
+  toggleWishlist: (productId: string) => Promise<boolean | null>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -102,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
 
   const refreshAddresses = async () => {
     try {
@@ -118,6 +145,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOrders(data.map(mapApiOrder));
     } catch {
       setOrders([]);
+    }
+  };
+
+  const refreshWishlist = async () => {
+    try {
+      const data = await apiGet<WishlistItem[]>("/wishlist");
+      setWishlistItems(data);
+    } catch {
+      setWishlistItems([]);
     }
   };
 
@@ -142,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await apiGet<UserProfile>("/auth/me");
       setUser(profile);
       localStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
-      await Promise.all([refreshAddresses(), refreshOrders()]);
+      await Promise.all([refreshAddresses(), refreshOrders(), refreshWishlist()]);
     } catch (error: any) {
       const status = Number(error?.status ?? 0);
       const isAuthError = status === 401 || status === 403;
@@ -153,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setSavedAddresses([]);
         setOrders([]);
+        setWishlistItems([]);
       }
     } finally {
       setIsAuthLoading(false);
@@ -169,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("1jm_token", result.token);
       localStorage.setItem(USER_CACHE_KEY, JSON.stringify(result.user));
       setUser(result.user);
-      await Promise.all([refreshAddresses(), refreshOrders()]);
+      await Promise.all([refreshAddresses(), refreshOrders(), refreshWishlist()]);
       return null;
     } catch (error: any) {
       return error?.message ?? "Unable to log in.";
@@ -184,6 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.user);
       setSavedAddresses([]);
       setOrders([]);
+      setWishlistItems([]);
       return null;
     } catch (error: any) {
       return error?.message ?? "Unable to sign up.";
@@ -194,6 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSavedAddresses([]);
     setOrders([]);
+    setWishlistItems([]);
     localStorage.removeItem("1jm_token");
     localStorage.removeItem("1nja_cart");
     localStorage.removeItem(USER_CACHE_KEY);
@@ -257,6 +296,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrders((current) => [newOrder, ...current]);
   };
 
+  const isWishlisted = (productId: string) =>
+    wishlistItems.some((item) => item.productId === productId);
+
+  const toggleWishlist = async (productId: string) => {
+    if (!user) return null;
+    const already = isWishlisted(productId);
+    try {
+      if (already) {
+        await apiDelete(`/wishlist/${productId}`);
+        setWishlistItems((current) => current.filter((item) => item.productId !== productId));
+        return false;
+      }
+      const created = await apiPost<WishlistItem>("/wishlist", { productId });
+      setWishlistItems((current) => [created, ...current.filter((item) => item.productId !== productId)]);
+      return true;
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -276,6 +335,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orders,
         refreshOrders,
         addOrder,
+        wishlistItems,
+        refreshWishlist,
+        isWishlisted,
+        toggleWishlist,
       }}
     >
       {children}

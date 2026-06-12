@@ -393,7 +393,7 @@ export default function Home() {
         {/* Bottom fade */}
         <div className="absolute inset-x-0 bottom-0 h-48 z-0 bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
 
-        <div className="relative z-10 text-center px-4 max-w-5xl mx-auto flex flex-col items-center pb-28 md:pb-24">
+        <div className="relative z-10 text-center px-4 max-w-5xl mx-auto flex flex-col items-center pb-20 md:pb-16">
           <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[6.2rem] leading-[1.12] font-bebas">
             {splitText(heroLine1)}
           </h1>
@@ -408,18 +408,20 @@ export default function Home() {
             {heroDescription}
           </p>
 
+          <div className="mt-12  flex flex-col items-center text-[var(--brand-yellow)] gap-2">
+            <span className="font-bebas tracking-widest text-sm opacity-60">SCROLL</span>
+            <ChevronDown className="animate-bounce" />
+          </div>
+
           <Link 
             to={heroCtaUrl}
-            className="mt-12 inline-flex items-center gap-2 px-8 py-3 rounded-full border-2 border-[var(--brand-yellow)] text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest hover:bg-[var(--brand-yellow)] hover:text-black transition-colors group hero-cta-glow"
+            className="mt-6 md:mt-8 inline-flex items-center gap-2 px-8 py-3 rounded-full border-2 border-[var(--brand-yellow)] text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest hover:bg-[var(--brand-yellow)] hover:text-black transition-colors group hero-cta-glow"
           >
             {heroCtaLabel} <ArrowRight className="group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
 
-        <div className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center text-[var(--brand-yellow)] gap-2 z-10">
-          <span className="font-bebas tracking-widest text-sm opacity-60">SCROLL</span>
-          <ChevronDown className="animate-bounce" />
-        </div>
+        <div className="absolute bottom-6 left-0 right-0 h-14 pointer-events-none bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
       </section>
 
             {/* MARQUEE */}

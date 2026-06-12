@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User, Package, MapPin, Lock, LogOut, Plus, Trash2,
-  CheckCircle, Edit3, Star, ChevronDown, ChevronUp, Eye, EyeOff
+  CheckCircle, Edit3, Star, ChevronDown, ChevronUp, Eye, EyeOff, Heart
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import type { SavedAddress } from "@/context/AuthContext";
 
-type Tab = "overview" | "orders" | "addresses" | "profile" | "password";
+type Tab = "overview" | "orders" | "wishlist" | "addresses" | "profile" | "password";
 
 const STATUS_STYLE: Record<string, string> = {
   Processing: "text-[var(--brand-yellow)] bg-[var(--brand-yellow)]/10 border-[var(--brand-yellow)]/30",
@@ -122,8 +122,23 @@ function AddressForm({
 }
 
 export default function AccountPage() {
-  const { user, isAuthLoading, logout, updateProfile, changePassword, savedAddresses, addAddress, updateAddress, removeAddress, setDefaultAddress, orders } = useAuth();
+  const {
+    user,
+    isAuthLoading,
+    logout,
+    updateProfile,
+    changePassword,
+    savedAddresses,
+    addAddress,
+    updateAddress,
+    removeAddress,
+    setDefaultAddress,
+    orders,
+    wishlistItems,
+    toggleWishlist,
+  } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [tab, setTab] = useState<Tab>("overview");
 
   // Profile
@@ -151,6 +166,16 @@ export default function AccountPage() {
     if (!isAuthLoading && !user) navigate("/auth");
   }, [isAuthLoading, user, navigate]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const requestedTab = params.get("tab");
+    if (!requestedTab) return;
+    const allowedTabs: Tab[] = ["overview", "orders", "wishlist", "addresses", "profile", "password"];
+    if (allowedTabs.includes(requestedTab as Tab)) {
+      setTab(requestedTab as Tab);
+    }
+  }, [location.search]);
+
   if (isAuthLoading) {
     return (
       <main className="w-full min-h-screen bg-[var(--brand-black)] pt-28 pb-20 px-6 md:px-12">
@@ -162,6 +187,7 @@ export default function AccountPage() {
   }
 
   if (!user) return null;
+  if (user.role === "admin") return <Navigate to="/admin" replace />;
 
   const handleLogout = () => { logout(); navigate("/"); };
 
@@ -204,6 +230,7 @@ export default function AccountPage() {
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "OVERVIEW", icon: User },
     { id: "orders", label: `ORDERS (${orders.length})`, icon: Package },
+    { id: "wishlist", label: `WISHLIST (${wishlistItems.length})`, icon: Heart },
     { id: "addresses", label: "ADDRESSES", icon: MapPin },
     { id: "profile", label: "PROFILE", icon: Edit3 },
     { id: "password", label: "PASSWORD", icon: Lock },
@@ -256,10 +283,11 @@ export default function AccountPage() {
               {tab === "overview" && (
                 <motion.div key="overview" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                   <h2 className="text-white font-bebas text-3xl mb-6">DASHBOARD</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                     {[
                       { label: "TOTAL ORDERS", value: orders.length, action: () => setTab("orders") },
                       { label: "SAVED ADDRESSES", value: savedAddresses.length, action: () => setTab("addresses") },
+                      { label: "WISHLIST ITEMS", value: wishlistItems.length, action: () => setTab("wishlist") },
                       { label: "MEMBER SINCE", value: new Date(user.createdAt).getFullYear(), action: () => setTab("profile") },
                     ].map((s) => (
                       <button key={s.label} onClick={s.action}
@@ -360,6 +388,54 @@ export default function AccountPage() {
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* WISHLIST */}
+              {tab === "wishlist" && (
+                <motion.div key="wishlist" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                  <h2 className="text-white font-bebas text-3xl mb-6">WISHLIST</h2>
+                  {wishlistItems.length === 0 ? (
+                    <div className="bg-[#161616] border border-[#222] p-12 text-center">
+                      <Heart size={48} className="text-[#333] mx-auto mb-4" />
+                      <p className="text-[var(--brand-gray)] font-bebas text-2xl mb-4">No wishlist items yet</p>
+                      <button onClick={() => navigate("/shop")} className="px-8 py-3 bg-[var(--brand-yellow)] text-black font-bebas text-xl tracking-widest hover:bg-white transition-colors">
+                        BROWSE SHOP
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {wishlistItems.map((item) => {
+                        if (!item.product) return null;
+                        return (
+                          <div key={item.id} className="bg-[#161616] border border-[#222] p-4 flex gap-4">
+                            <img src={item.product.image} alt={item.product.name} className="w-20 h-20 object-cover border border-[#222]" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-xs">{item.product.artist.toUpperCase()}</p>
+                              <p className="text-white font-bebas text-xl leading-tight truncate">{item.product.name}</p>
+                              <p className="text-[var(--brand-yellow)] font-bebas text-xl mt-1">${item.product.price}</p>
+                              <div className="flex gap-2 mt-3">
+                                <button
+                                  onClick={() => navigate(`/shop/${item.productId}`)}
+                                  className="px-3 py-1 border border-[var(--brand-yellow)] text-[var(--brand-yellow)] font-bebas tracking-widest hover:bg-[var(--brand-yellow)] hover:text-black transition-colors"
+                                >
+                                  VIEW
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    await toggleWishlist(item.productId);
+                                  }}
+                                  className="px-3 py-1 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest hover:border-red-500 hover:text-red-400 transition-colors"
+                                >
+                                  REMOVE
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </motion.div>

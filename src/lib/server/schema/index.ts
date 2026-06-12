@@ -9,3 +9,4 @@ export * from "./orderItems";
 export * from "./cmsPages";
 export * from "./cmsSections";
 export * from "./cmsSectionItems";
+export * from "./wishlists";

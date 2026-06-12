@@ -57,6 +57,15 @@ export async function ensureServerSchema() {
         );`,
       );
       await pool.query(
+        `create table if not exists wishlists (
+          id text primary key,
+          user_id text not null,
+          product_id text not null,
+          created_at timestamp not null default now(),
+          unique (user_id, product_id)
+        );`,
+      );
+      await pool.query(
         `create table if not exists cms_pages (
           id text primary key,
           page_key text not null unique,
@@ -112,6 +121,8 @@ export async function ensureServerSchema() {
       await pool.query(`create index if not exists cms_sections_sort_idx on cms_sections (page_id, sort_order);`);
       await pool.query(`create index if not exists cms_items_section_id_idx on cms_section_items (section_id);`);
       await pool.query(`create index if not exists cms_items_sort_idx on cms_section_items (section_id, sort_order);`);
+      await pool.query(`create index if not exists wishlists_user_id_idx on wishlists (user_id);`);
+      await pool.query(`create index if not exists wishlists_product_id_idx on wishlists (product_id);`);
 
       await pool.query(
         `insert into cms_pages (id, page_key, title, active)

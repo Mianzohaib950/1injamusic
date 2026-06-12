@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, ShoppingBag, User, LogOut } from "lucide-react";
+import { Menu, X, ShoppingBag, User, LogOut, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
@@ -19,7 +19,7 @@ export default function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
   const { totalItems, setCartOpen } = useCart();
-  const { isLoggedIn, user, logout } = useAuth();
+  const { isLoggedIn, user, logout, wishlistItems } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -109,6 +109,14 @@ export default function Navigation() {
     navigate("/");
   };
 
+  const handleWishlistClick = () => {
+    if (user?.role === "admin") {
+      navigate("/admin");
+      return;
+    }
+    navigate("/account?tab=wishlist");
+  };
+
   return (
     <>
       <nav
@@ -172,6 +180,22 @@ export default function Navigation() {
             )}
 
             {/* Cart button */}
+            {isLoggedIn && (
+            <button
+              onClick={handleWishlistClick}
+              className="relative text-white hover:text-[var(--brand-yellow)] transition-colors"
+              aria-label="Open wishlist"
+            >
+              <Heart size={22} />
+              {wishlistItems.length > 0 && (
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-[var(--brand-yellow)] text-black font-bebas text-xs rounded-full flex items-center justify-center leading-none">
+                  {wishlistItems.length > 9 ? "9+" : wishlistItems.length}
+                </span>
+              )}
+            </button>
+            )}
+
+            {isLoggedIn && (
             <button
               onClick={() => setCartOpen(true)}
               className="relative text-white hover:text-[var(--brand-yellow)] transition-colors"
@@ -184,6 +208,7 @@ export default function Navigation() {
                 </span>
               )}
             </button>
+            )}
           </div>
 
           <div className="flex md:hidden items-center gap-4 z-50">
@@ -200,6 +225,22 @@ export default function Navigation() {
             </button>
 
             {/* Mobile cart */}
+            {isLoggedIn && (
+            <button
+              onClick={handleWishlistClick}
+              className="relative text-white hover:text-[var(--brand-yellow)] transition-colors"
+              aria-label="Open wishlist"
+            >
+              <Heart size={22} />
+              {wishlistItems.length > 0 && (
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-[var(--brand-yellow)] text-black font-bebas text-xs rounded-full flex items-center justify-center leading-none">
+                  {wishlistItems.length > 9 ? "9+" : wishlistItems.length}
+                </span>
+              )}
+            </button>
+            )}
+
+            {isLoggedIn && (
             <button
               onClick={() => setCartOpen(true)}
               className="relative text-white hover:text-[var(--brand-yellow)] transition-colors"
@@ -212,7 +253,7 @@ export default function Navigation() {
                 </span>
               )}
             </button>
-
+            )}
             <button
               className="text-[var(--brand-yellow)]"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

@@ -114,6 +114,14 @@ create table if not exists order_items (
   quantity integer not null
 );
 
+create table if not exists wishlists (
+  id text primary key,
+  user_id text not null,
+  product_id text not null,
+  created_at timestamp not null default now(),
+  unique (user_id, product_id)
+);
+
 create table if not exists cms_pages (
   id text primary key,
   page_key text not null unique,
@@ -171,6 +179,8 @@ create index if not exists bookings_status_idx on bookings (status);
 create index if not exists event_contacts_status_idx on event_contacts (status);
 create index if not exists orders_user_id_idx on orders (user_id);
 create index if not exists order_items_order_id_idx on order_items (order_id);
+create index if not exists wishlists_user_id_idx on wishlists (user_id);
+create index if not exists wishlists_product_id_idx on wishlists (product_id);
 create index if not exists cms_pages_page_key_idx on cms_pages (page_key);
 create index if not exists cms_sections_page_id_idx on cms_sections (page_id);
 create index if not exists cms_sections_sort_idx on cms_sections (page_id, sort_order);
