@@ -398,7 +398,7 @@ export default function Home() {
             {splitText(heroLine1)}
           </h1>
           <h1 ref={heroTextRef2} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
-            {splitText(`${heroLine2} `)}<span className="border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight2)}</span>
+            {splitText(`${heroLine2} `)}<span className=" relative inline-block border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight2)}</span>
           </h1>
           <h1 ref={heroTextRef3} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
             {splitText(`${heroLine3} `)}<span className="border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight3)}</span>
