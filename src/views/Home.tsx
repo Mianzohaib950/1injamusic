@@ -415,6 +415,7 @@ export default function Home() {
 
           <Link
             to={heroCtaUrl}
+            
             className="mt-2 md:mt-2 inline-flex items-center gap-2 px-8 py-3 rounded-full border-2 border-[var(--brand-yellow)] text-[var(--brand-yellow)] font-bebas text-2xl tracking-widest hover:bg-[var(--brand-yellow)] hover:text-black transition-colors group hero-cta-glow"
           >
             {heroCtaLabel} <ArrowRight className="group-hover:translate-x-1 transition-transform" />
