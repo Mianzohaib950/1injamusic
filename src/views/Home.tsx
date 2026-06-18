@@ -393,14 +393,14 @@ export default function Home() {
         {/* Bottom fade */}
         <div className="absolute inset-x-0 bottom-0 h-48 z-0 bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
 
-        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto flex flex-col items-center pb-28 md:pb-24 lg:pb-28">
-          <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[5.25rem] xl:text-[5.8rem] leading-[1.02] font-bebas">
+        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto flex flex-col items-center pb-20 md:pb-16 lg:pb-20">
+          <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[4.55rem] xl:text-[5.1rem] 2xl:text-[5.6rem] leading-[1.02] font-bebas">
             {splitText(heroLine1)}
           </h1>
-          <h1 ref={heroTextRef2} className="text-white text-4xl md:text-6xl lg:text-[5.25rem] xl:text-[5.8rem] leading-[1.02] font-bebas">
+          <h1 ref={heroTextRef2} className="text-white text-4xl md:text-6xl lg:text-[4.55rem] xl:text-[5.1rem] 2xl:text-[5.6rem] leading-[1.02] font-bebas">
             {splitText(`${heroLine2} `)}<span className=" relative inline-block border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight2)}</span>
           </h1>
-          <h1 ref={heroTextRef3} className="text-white text-4xl md:text-6xl lg:text-[5.25rem] xl:text-[5.8rem] leading-[1.02] font-bebas">
+          <h1 ref={heroTextRef3} className="text-white text-4xl md:text-6xl lg:text-[4.55rem] xl:text-[5.1rem] 2xl:text-[5.6rem] leading-[1.02] font-bebas">
             {splitText(`${heroLine3} `)}<span className="border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight3)}</span>
           </h1>
 
