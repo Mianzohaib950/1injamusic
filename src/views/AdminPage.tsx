@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import {
   BarChart3,
   CalendarCheck,
+  ChevronDown,
   ContactRound,
   Layers,
   Mic2,
@@ -43,6 +44,10 @@ const actionClass =
   "inline-flex items-center justify-center gap-2 bg-[var(--brand-yellow)] text-black font-bebas tracking-widest px-4 py-2 hover:bg-white transition-colors disabled:opacity-50";
 const ghostClass =
   "inline-flex items-center justify-center gap-2 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-4 py-2  h-9 hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
+const selectClass = `${inputClass} appearance-none pr-10 cursor-pointer`;
+const cmsSectionTypeOptions = ["hero", "content", "list", "gallery", "video", "marquee", "footer"];
+const productCategoryOptions = ["tee", "hoodie", "cap", "vinyl", "poster", "bundle"];
+const artistSortOrderOptions = Array.from({ length: 21 }, (_, index) => index);
 const ADMIN_CACHE_TTL_MS = 60_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
@@ -64,6 +69,32 @@ function capitalizeFirst(value: string) {
 
 function toDisplayLabel(value: string) {
   return capitalizeFirst(value.replace(/([a-z])([A-Z])/g, "$1 $2"));
+}
+
+function toUrlSlug(value: string) {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function toSectionKey(value: string) {
+  return toUrlSlug(value).replace(/-/g, "_");
+}
+
+function inferProductBadge(value: string) {
+  const name = String(value).toLowerCase();
+  if (!name.trim()) return "";
+  if (/\b(sale|bundle|discount|clearance)\b/.test(name)) return "SALE";
+  if (/\b(limited|exclusive|edition|vinyl)\b/.test(name)) return "LIMITED";
+  return "NEW";
+}
+
+function scrollToForm(ref: React.RefObject<HTMLElement | null>) {
+  window.setTimeout(() => {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 0);
 }
 
 function formatDateTime(value: string) {
@@ -210,6 +241,119 @@ function StatusText({ loading, error }: { loading: boolean; error: string }) {
   return null;
 }
 
+function FieldShell({
+  label,
+  caption,
+  className = "",
+  children,
+}: {
+  label: string;
+  caption: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`text-[var(--brand-gray)] font-sans text-sm ${className}`}>
+      <p className="mb-2">{label}</p>
+      {children}
+      <p className="mt-1 text-xs leading-snug text-[var(--brand-gray)]/75">{caption}</p>
+    </div>
+  );
+}
+
+function LabeledInput({
+  label,
+  caption,
+  className = "",
+  inputClassName = "",
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  caption: string;
+  inputClassName?: string;
+}) {
+  return (
+    <FieldShell label={label} caption={caption} className={className}>
+      <input {...props} className={`${inputClass} ${inputClassName}`} />
+    </FieldShell>
+  );
+}
+
+function LabeledTextarea({
+  label,
+  caption,
+  className = "",
+  textareaClassName = "",
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  label: string;
+  caption: string;
+  textareaClassName?: string;
+}) {
+  return (
+    <FieldShell label={label} caption={caption} className={className}>
+      <textarea {...props} className={`${inputClass} ${textareaClassName}`} />
+    </FieldShell>
+  );
+}
+
+function FileUrlField({
+  label,
+  caption,
+  value,
+  fileName,
+  onTextChange,
+  onFileChange,
+}: {
+  label: string;
+  caption: string;
+  value: string;
+  fileName: string;
+  onTextChange: (value: string) => void;
+  onFileChange: (file?: File) => void;
+}) {
+  return (
+    <FieldShell label={label} caption={caption}>
+      <div className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
+        <input
+          className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
+          value={value}
+          onChange={(e) => onTextChange(e.target.value)}
+        />
+        <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
+          {fileName || "Choose"}
+          <input className="hidden" type="file" accept="image/*" onChange={(e) => onFileChange(e.target.files?.[0])} />
+        </label>
+      </div>
+    </FieldShell>
+  );
+}
+
+function DropdownField({
+  label,
+  caption,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  caption: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <FieldShell label={label} caption={caption}>
+      <div className="relative mt-2">
+        <select className={selectClass} value={value} onChange={(e) => onChange(e.target.value)}>
+          {children}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand-yellow)]" />
+      </div>
+    </FieldShell>
+  );
+}
+
 function Dashboard() {
   const { data, loading, error } = useAdminData<any>("/admin/dashboard", null);
   const statusEntries = useMemo(() => {
@@ -283,11 +427,34 @@ function ProductsPanel() {
     inStock: true,
   };
   const { data, loading, error, reload } = useAdminData<any[]>("/admin/products", []);
+  const { data: artists, loading: artistsLoading, error: artistsError } = useAdminData<any[]>("/admin/artists", []);
   const [form, setForm] = useState<any>(blank);
   const [editingId, setEditingId] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [imageFileName, setImageFileName] = useState("");
   const [hoverImageFileName, setHoverImageFileName] = useState("");
+  const [autoProductSlug, setAutoProductSlug] = useState(true);
+  const [autoProductBadge, setAutoProductBadge] = useState(true);
+  const productFormRef = useRef<HTMLDivElement>(null);
+  const artistOptions = useMemo(() => {
+    const options = artists.map((artist) => ({
+      name: String(artist.name ?? ""),
+      slug: String(artist.slug ?? ""),
+    })).filter((artist) => artist.name && artist.slug);
+    if (form.artist && form.artistSlug && !options.some((artist) => artist.slug === form.artistSlug)) {
+      return [{ name: String(form.artist), slug: String(form.artistSlug) }, ...options];
+    }
+    return options;
+  }, [artists, form.artist, form.artistSlug]);
+  const categoryOptions = useMemo(() => {
+    const options = new Set(productCategoryOptions);
+    data.forEach((product) => {
+      const category = String(product.category ?? "").trim();
+      if (category) options.add(category);
+    });
+    if (form.category) options.add(String(form.category));
+    return Array.from(options);
+  }, [data, form.category]);
 
   const pickImage = (field: "image" | "imageHover", file?: File) => {
     if (!file) return;
@@ -314,6 +481,8 @@ function ProductsPanel() {
     setImageFileName("");
     setHoverImageFileName("");
     setEditingId("");
+    setAutoProductSlug(true);
+    setAutoProductBadge(true);
     setShowForm(false);
     await reload();
   };
@@ -323,6 +492,8 @@ function ProductsPanel() {
     setEditingId("");
     setImageFileName("");
     setHoverImageFileName("");
+    setAutoProductSlug(true);
+    setAutoProductBadge(true);
     setShowForm(true);
   };
 
@@ -331,11 +502,31 @@ function ProductsPanel() {
     setEditingId("");
     setImageFileName("");
     setHoverImageFileName("");
+    setAutoProductSlug(true);
+    setAutoProductBadge(true);
     setShowForm(false);
   };
 
+  const selectProductArtist = (artistSlug: string) => {
+    const selectedArtist = artistOptions.find((artist) => artist.slug === artistSlug);
+    setForm({
+      ...form,
+      artist: selectedArtist?.name ?? "",
+      artistSlug,
+    });
+  };
+
+  const updateProductName = (name: string) => {
+    setForm((current: any) => ({
+      ...current,
+      name,
+      id: !editingId && autoProductSlug ? toUrlSlug(name) : current.id,
+      badge: autoProductBadge ? inferProductBadge(name) : current.badge,
+    }));
+  };
+
   return (
-    <CrudLayout title="PRODUCTS" loading={loading} error={error}>
+    <CrudLayout title="PRODUCTS" loading={loading || artistsLoading} error={error || artistsError}>
       <div className="mb-6 flex items-center justify-end gap-3">
         {!showForm ? (
           <button className={actionClass} onClick={startAddProduct}>
@@ -348,29 +539,41 @@ function ProductsPanel() {
         )}
       </div>
       {showForm && (
-        <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
-          {["id", "name", "artist", "artistSlug", "category", "image", "imageHover", "badge", "sizes"].map((key) => (
-            <input key={key} className={inputClass} placeholder={toDisplayLabel(key)} value={form[key] ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })} disabled={key === "id" && !!editingId} />
-          ))}
-          <div className="text-[var(--brand-gray)] font-sans text-sm">
-            Image file
+        <div ref={productFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
+          <LabeledInput label="Product Slug" caption="Auto-fills from Product Name; edit it before saving if a custom slug is needed." value={form.id ?? ""} onChange={(e) => { setAutoProductSlug(false); setForm({ ...form, id: e.target.value }); }} disabled={!!editingId} />
+          <LabeledInput label="Product Name" caption="Enter the public product name; slug and badge will auto-fill from this." value={form.name ?? ""} onChange={(e) => updateProductName(e.target.value)} />
+          <LabeledInput label="Image URL" caption="Paste the main product image URL, or use the file picker below." value={form.image ?? ""} onChange={(e) => setForm({ ...form, image: e.target.value })} />
+          <LabeledInput label="Hover Image URL" caption="Paste the alternate image shown when customers hover the product." value={form.imageHover ?? ""} onChange={(e) => setForm({ ...form, imageHover: e.target.value })} />
+          <LabeledInput label="Badge" caption="Auto-suggests NEW, LIMITED, or SALE from Product Name; edit if needed." value={form.badge ?? ""} onChange={(e) => { setAutoProductBadge(false); setForm({ ...form, badge: e.target.value }); }} />
+          <LabeledInput label="Sizes" caption="Enter available sizes separated by commas, for example S,M,L,XL." value={form.sizes ?? ""} onChange={(e) => setForm({ ...form, sizes: e.target.value })} />
+          <DropdownField label="Artist Name" caption="Choose the artist connected to this product." value={form.artistSlug ?? ""} onChange={selectProductArtist}>
+            <option value="" disabled>Select artist</option>
+            {artistOptions.map((artist) => (
+              <option key={artist.slug} value={artist.slug}>{artist.name}</option>
+            ))}
+          </DropdownField>
+          <DropdownField label="Category Name" caption="Choose the product category used for shop filtering." value={form.category ?? ""} onChange={(value) => setForm({ ...form, category: value })}>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>{capitalizeFirst(category)}</option>
+            ))}
+          </DropdownField>
+          <FieldShell label="Image File" caption="Upload a main product image from your device when you do not want to paste a URL.">
             <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
               <span className="text-white text-sm">{imageFileName || "No file selected"}</span>
               <span className={ghostClass}>Choose</span>
               <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("image", e.target.files?.[0])} />
             </label>
-          </div>
-          <div className="text-[var(--brand-gray)] font-sans text-sm">
-            Hover image file
+          </FieldShell>
+          <FieldShell label="Hover Image File" caption="Upload the optional alternate product image for hover state.">
             <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
               <span className="text-white text-sm">{hoverImageFileName || "No file selected"}</span>
               <span className={ghostClass}>Choose</span>
               <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("imageHover", e.target.files?.[0])} />
             </label>
-          </div>
-          <input className={inputClass} placeholder="Price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-          <input className={inputClass} placeholder="Original Price" type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} />
-          <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </FieldShell>
+          <LabeledInput label="Price" caption="Enter the current selling price as a number." type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+          <LabeledInput label="Original Price" caption="Enter the compare-at price, or leave blank when there is no discount." type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} />
+          <LabeledTextarea label="Description" caption="Write the product description shown on the product detail page." className="md:col-span-2" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
             <input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />
             In Stock
@@ -387,7 +590,7 @@ function ProductsPanel() {
         }}
         actions={(row) => (
           <>
-            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setHoverImageFileName(""); setShowForm(true); }}>EDIT</button>
+            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setHoverImageFileName(""); setAutoProductSlug(false); setAutoProductBadge(false); setShowForm(true); scrollToForm(productFormRef); }}>EDIT</button>
             <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/products/${row.id}`); await reload(); }}><Trash2 size={14} /></button>
           </>
         )}
@@ -403,6 +606,7 @@ function ArtistsPanel() {
   const [editingSlug, setEditingSlug] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [artistImageFileName, setArtistImageFileName] = useState("");
+  const artistFormRef = useRef<HTMLDivElement>(null);
 
   const pickArtistImage = (file?: File) => {
     if (!file) return;
@@ -454,35 +658,28 @@ function ArtistsPanel() {
         )}
       </div>
       {showForm && (
-        <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
-          {["slug", "name", "genres", "bio", "image", "bookingEmail", "sortOrder"].map((key) => (
-            key === "image" ? (
-              <div key={key} className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
-                <input
-                  className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
-                  placeholder={artistImageFileName ? `Image: ${artistImageFileName}` : "Image"}
-                  value={form.image ?? ""}
-                  onChange={(e) => {
-                    setArtistImageFileName("");
-                    setForm({ ...form, image: e.target.value });
-                  }}
-                />
-                <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
-                  Choose
-                  <input className="hidden" type="file" accept="image/*" onChange={(e) => pickArtistImage(e.target.files?.[0])} />
-                </label>
-              </div>
-            ) : (
-              <input
-                key={key}
-                className={inputClass}
-                placeholder={toDisplayLabel(key)}
-                value={form[key] ?? ""}
-                disabled={key === "slug" && !!editingSlug}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-              />
-            )
-          ))}
+        <div ref={artistFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
+          <LabeledInput label="Slug" caption="Enter the URL-safe artist slug; it cannot be changed while editing." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+          <LabeledInput label="Name" caption="Enter the artist name shown across the website." value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <LabeledInput label="Genres" caption="Enter genres separated by commas, for example Dancehall,Hip-Hop." value={form.genres ?? ""} onChange={(e) => setForm({ ...form, genres: e.target.value })} />
+          <LabeledInput label="Bio" caption="Write a short artist biography for the artist page." value={form.bio ?? ""} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
+          <FileUrlField
+            label="Image"
+            caption="Paste a profile image URL or choose an image file from your device."
+            value={form.image ?? ""}
+            fileName={artistImageFileName}
+            onTextChange={(value) => {
+              setArtistImageFileName("");
+              setForm({ ...form, image: value });
+            }}
+            onFileChange={pickArtistImage}
+          />
+          <LabeledInput label="Booking Email" caption="Enter the email address used for artist booking requests." value={form.bookingEmail ?? ""} onChange={(e) => setForm({ ...form, bookingEmail: e.target.value })} />
+          <DropdownField label="Sort Order" caption="Choose the display priority for this artist." value={String(form.sortOrder ?? 0)} onChange={(value) => setForm({ ...form, sortOrder: Number(value) })}>
+            {artistSortOrderOptions.map((sortOrder) => (
+              <option key={sortOrder} value={sortOrder}>{sortOrder}</option>
+            ))}
+          </DropdownField>
           <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
             <input type="checkbox" checked={form.active ?? true} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
             Active
@@ -492,7 +689,7 @@ function ArtistsPanel() {
       )}
       <AdminTable rows={data} columns={["name", "slug", "genres", "active"]} formatCell={(_, column, value) => column === "active" ? (value ? "Active" : "Inactive") : undefined} actions={(row) => (
         <>
-          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setArtistImageFileName(""); setShowForm(true); }}>EDIT</button>
+          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setArtistImageFileName(""); setShowForm(true); scrollToForm(artistFormRef); }}>EDIT</button>
           <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/artists/${row.slug}`); await reload(); }}><Trash2 size={14} /></button>
         </>
       )} />
@@ -559,6 +756,11 @@ function CmsPanel() {
   const [showItemForm, setShowItemForm] = useState(false);
   const [sectionImageFileName, setSectionImageFileName] = useState("");
   const [itemImageFileName, setItemImageFileName] = useState("");
+  const [autoSectionKey, setAutoSectionKey] = useState(true);
+  const pageEditFormRef = useRef<HTMLDivElement>(null);
+  const sectionFormRef = useRef<HTMLDivElement>(null);
+  const sectionItemsPanelRef = useRef<HTMLDivElement>(null);
+  const itemFormRef = useRef<HTMLDivElement>(null);
   const [sectionForm, setSectionForm] = useState({
     sectionKey: "",
     sectionType: "content",
@@ -608,15 +810,42 @@ function CmsPanel() {
   }, [pages, selectedPageKey]);
 
   useEffect(() => {
-    if (data.length === 0) return;
+    if (!selectedSectionId) return;
     const hasSelected = data.some((section) => section.id === selectedSectionId);
-    if (hasSelected) return;
-    const preferred = data.find((section) => section.sectionKey === "content") ?? data[0];
-    setSelectedSectionId(preferred.id);
+    if (!hasSelected) {
+      setSelectedSectionId("");
+      resetItemForm();
+      setShowItemForm(false);
+    }
   }, [data, selectedSectionId]);
 
   const currentSection = data.find((section) => section.id === selectedSectionId) ?? null;
   const currentPage = pages.find((page) => page.pageKey === selectedPageKey) ?? null;
+  const sectionTypeOptions = useMemo(() => {
+    const options = new Set(cmsSectionTypeOptions);
+    data.forEach((section) => {
+      if (section.sectionType) options.add(section.sectionType);
+    });
+    if (sectionForm.sectionType) options.add(sectionForm.sectionType);
+    return Array.from(options);
+  }, [data, sectionForm.sectionType]);
+
+  const clearCmsSectionState = () => {
+    setEditingSectionId("");
+    setSelectedSectionId("");
+    resetItemForm();
+    setShowItemForm(false);
+    setShowSectionForm(false);
+  };
+
+  const selectCmsPage = (pageKey: string) => {
+    setSelectedPageKey(pageKey);
+    clearCmsSectionState();
+    setEditingPageId("");
+    setPageEditTitle("");
+    setPageEditActive(true);
+    setShowPageForm(false);
+  };
 
   const addPage = async () => {
     const pageKey = newPageKey.trim().toLowerCase();
@@ -646,10 +875,13 @@ function CmsPanel() {
   };
 
   const startEditPage = (page: CmsPage) => {
+    setSelectedPageKey(page.pageKey);
+    clearCmsSectionState();
     setEditingPageId(page.id);
     setPageEditTitle(page.title);
     setPageEditActive(page.active);
     setShowPageForm(false);
+    scrollToForm(pageEditFormRef);
   };
 
   const savePage = async () => {
@@ -678,6 +910,7 @@ function CmsPanel() {
 
   const startAddSection = () => {
     setEditingSectionId("");
+    setAutoSectionKey(true);
     setSectionForm({
       sectionKey: "",
       sectionType: "content",
@@ -696,6 +929,7 @@ function CmsPanel() {
 
   const cancelSectionForm = () => {
     setEditingSectionId("");
+    setAutoSectionKey(true);
     setSectionForm({
       sectionKey: "",
       sectionType: "content",
@@ -712,6 +946,14 @@ function CmsPanel() {
     setShowSectionForm(false);
   };
 
+  const updateSectionTitle = (title: string) => {
+    setSectionForm((current) => ({
+      ...current,
+      title,
+      sectionKey: !editingSectionId && autoSectionKey ? toSectionKey(title) : current.sectionKey,
+    }));
+  };
+
   const saveSection = async () => {
     const editingSection = data.find((section) => section.id === editingSectionId);
     const payload = {
@@ -724,6 +966,7 @@ function CmsPanel() {
     if (editingSectionId) await apiPut(`/admin/cms/sections/${editingSectionId}`, payload);
     else await apiPost("/admin/cms/sections", payload);
     setEditingSectionId("");
+    setAutoSectionKey(true);
     setSectionForm({
       sectionKey: "",
       sectionType: "content",
@@ -759,7 +1002,7 @@ function CmsPanel() {
     setShowItemForm(true);
   };
 
-  const cancelItemForm = () => {
+  const resetItemForm = () => {
     setEditingItemId("");
     setItemForm({
       itemKey: "",
@@ -774,7 +1017,18 @@ function CmsPanel() {
       active: true,
     });
     setItemImageFileName("");
+  };
+
+  const cancelItemForm = () => {
+    resetItemForm();
     setShowItemForm(false);
+  };
+
+  const openSectionItems = (sectionId: string) => {
+    setSelectedSectionId(sectionId);
+    resetItemForm();
+    setShowItemForm(false);
+    scrollToForm(sectionItemsPanelRef);
   };
 
   const saveItem = async () => {
@@ -809,26 +1063,28 @@ function CmsPanel() {
   return (
     <CrudLayout title="CMS" loading={loading || pagesLoading} error={error || pagesError}>
       <div className={`${panelClass} p-5 mb-6`}>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
-          <label className="text-[var(--brand-gray)] font-sans text-sm">
-            Page
-            <select className={`${inputClass} mt-2`} value={selectedPageKey} onChange={(e) => { setSelectedPageKey(e.target.value); setEditingSectionId(""); setSelectedSectionId(""); }}>
-              {pages.map((page) => (
-                <option key={page.id} value={page.pageKey}>{capitalizeFirst(page.pageKey)}</option>
-              ))}
-            </select>
-          </label>
-          {!showPageForm ? (
-            <button className={actionClass} onClick={startAddPage}><Save size={16} /> ADD PAGE</button>
-          ) : (
-            <button className={ghostClass} onClick={cancelPageForm}>CANCEL</button>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-start">
+          <DropdownField label="Page" caption="Choose which CMS page you want to manage." value={selectedPageKey} onChange={selectCmsPage}>
+            {pages.map((page) => (
+              <option key={page.id} value={page.pageKey}>{capitalizeFirst(page.pageKey)}</option>
+            ))}
+          </DropdownField>
+          {!showPageForm && (
+            <div className="pt-[29px]">
+              <button className={actionClass} onClick={startAddPage}><Save size={16} /> ADD PAGE</button>
+            </div>
           )}
         </div>
         {showPageForm && (
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-            <input className={inputClass} placeholder="New Page Key" value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
-            <input className={inputClass} placeholder="New Page Title" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
-            <button className={actionClass} onClick={addPage}><Save size={16} /> SAVE PAGE</button>
+          <div className="mt-4 border-t border-[#222] pt-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-3 items-start">
+            <LabeledInput label="New Page Key" caption="Enter the URL-safe key used for this CMS page." value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
+            <LabeledInput label="New Page Title" caption="Enter the title shown for this CMS page in admin and page data." value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
+            <div className="pt-[29px]">
+              <button className={actionClass} onClick={addPage}><Save size={16} /> SAVE PAGE</button>
+            </div>
+            <div className="pt-[29px]">
+              <button className={ghostClass} onClick={cancelPageForm}>CANCEL</button>
+            </div>
           </div>
         )}
         <div className="mt-4">
@@ -896,8 +1152,8 @@ function CmsPanel() {
           </div>
         </div>
         {editingPageId && (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center">
-            <input className={inputClass} placeholder="Page Title" value={pageEditTitle} onChange={(e) => setPageEditTitle(e.target.value)} />
+          <div ref={pageEditFormRef} className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-center scroll-mt-28">
+            <LabeledInput label="Page Title" caption="Update the display title for the selected CMS page." value={pageEditTitle} onChange={(e) => setPageEditTitle(e.target.value)} />
             <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
               <input type="checkbox" checked={pageEditActive} onChange={(e) => setPageEditActive(e.target.checked)} />
               Active
@@ -916,34 +1172,34 @@ function CmsPanel() {
       </div>
 
       {showSectionForm && (
-        <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
-          <input className={inputClass} placeholder="Section Key" value={sectionForm.sectionKey} onChange={(e) => setSectionForm({ ...sectionForm, sectionKey: e.target.value })} disabled={!!editingSectionId} />
-          <input className={inputClass} placeholder="Section Type" value={sectionForm.sectionType} onChange={(e) => setSectionForm({ ...sectionForm, sectionType: e.target.value })} />
-          <input className={inputClass} placeholder="Title" value={sectionForm.title} onChange={(e) => setSectionForm({ ...sectionForm, title: e.target.value })} />
-          <input className={inputClass} placeholder="Subtitle" value={sectionForm.subtitle} onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })} />
-          <div className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
-            <input
-              className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
-              placeholder={sectionImageFileName ? `Image: ${sectionImageFileName}` : "Image"}
-              value={sectionForm.imageUrl}
-              onChange={(e) => {
-                setSectionImageFileName("");
-                setSectionForm({ ...sectionForm, imageUrl: e.target.value });
-              }}
-            />
-            <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
-              Choose
-              <input className="hidden" type="file" accept="image/*" onChange={(e) => pickCmsImage("section", e.target.files?.[0])} />
-            </label>
-          </div>
-          <input className={inputClass} placeholder="Video URL" value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
-          <input className={inputClass} placeholder="CTA Label" value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
-          <input className={inputClass} placeholder="CTA URL" value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
+        <div ref={sectionFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
+          <LabeledInput label="Section Key" caption="Auto-fills from Title; edit it before saving if a custom key is needed." value={sectionForm.sectionKey} onChange={(e) => { setAutoSectionKey(false); setSectionForm({ ...sectionForm, sectionKey: e.target.value }); }} disabled={!!editingSectionId} />
+          <DropdownField label="Section Type" caption="Choose the layout behavior for this CMS section." value={sectionForm.sectionType} onChange={(value) => setSectionForm({ ...sectionForm, sectionType: value })}>
+            {sectionTypeOptions.map((sectionType) => (
+              <option key={sectionType} value={sectionType}>{capitalizeFirst(sectionType)}</option>
+            ))}
+          </DropdownField>
+          <LabeledInput label="Title" caption="Enter the headline displayed for this section; Section Key will auto-fill from it." value={sectionForm.title} onChange={(e) => updateSectionTitle(e.target.value)} />
+          <LabeledInput label="Subtitle" caption="Enter optional supporting text shown near the title." value={sectionForm.subtitle} onChange={(e) => setSectionForm({ ...sectionForm, subtitle: e.target.value })} />
+          <FileUrlField
+            label="Image"
+            caption="Paste a section image URL or choose an image file from your device."
+            value={sectionForm.imageUrl}
+            fileName={sectionImageFileName}
+            onTextChange={(value) => {
+              setSectionImageFileName("");
+              setSectionForm({ ...sectionForm, imageUrl: value });
+            }}
+            onFileChange={(file) => pickCmsImage("section", file)}
+          />
+          <LabeledInput label="Video URL" caption="Paste an optional video URL for video-based sections." value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
+          <LabeledInput label="CTA Label" caption="Enter the button or link text for this section." value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
+          <LabeledInput label="CTA URL" caption="Enter the destination URL for the call-to-action." value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
           <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
             <input type="checkbox" checked={sectionForm.active} onChange={(e) => setSectionForm({ ...sectionForm, active: e.target.checked })} />
             Active
           </label>
-          <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
+          <LabeledTextarea label="Description" caption="Write the main body copy for this CMS section." className="md:col-span-2" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
           <button className={actionClass} onClick={saveSection}><Save size={16} /> {editingSectionId ? "UPDATE" : "ADD"} SECTION</button>
         </div>
       )}
@@ -964,6 +1220,7 @@ function CmsPanel() {
           <>
             <button className={compactActionClass} onClick={() => {
               setEditingSectionId(row.id);
+              setAutoSectionKey(false);
               setSectionForm({
                 sectionKey: row.sectionKey,
                 sectionType: row.sectionType,
@@ -977,98 +1234,92 @@ function CmsPanel() {
                 active: row.active ?? true,
               });
               setSectionImageFileName("");
-              setSelectedSectionId(row.id);
               setShowSectionForm(true);
+              scrollToForm(sectionFormRef);
             }}>EDIT</button>
-            <button className={compactActionClass} onClick={() => setSelectedSectionId(row.id)}>ITEMS</button>
+            <button className={compactActionClass} onClick={() => openSectionItems(row.id)}>ITEMS</button>
             <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/sections/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
           </>
         )}
       />
 
-      <div className={`${panelClass} p-5 mt-6`}>
-        <h3 className="text-white font-bebas text-3xl mb-4">SECTION ITEMS {currentSection ? `(${capitalizeFirst(currentSection.sectionKey)})` : ""}</h3>
-        {!currentSection && <p className="text-[var(--brand-gray)] font-sans">Select a section to manage its items.</p>}
-        {currentSection && (
-          <>
-            <div className="mb-6 flex items-center justify-end gap-3">
-              {!showItemForm ? (
-                <button className={actionClass} onClick={startAddItem}><Save size={16} /> ADD ITEM</button>
-              ) : (
-                <button className={ghostClass} onClick={cancelItemForm}>CANCEL</button>
-              )}
-            </div>
-            {showItemForm && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-                <input className={inputClass} placeholder="Item Key" value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
-                <input className={inputClass} placeholder="Title" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
-                <input className={inputClass} placeholder="Subtitle" value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
-                <div className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
-                  <input
-                    className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
-                    placeholder={itemImageFileName ? `Image: ${itemImageFileName}` : "Image"}
-                    value={itemForm.imageUrl}
-                    onChange={(e) => {
-                      setItemImageFileName("");
-                      setItemForm({ ...itemForm, imageUrl: e.target.value });
-                    }}
-                  />
-                  <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
-                    Choose
-                    <input className="hidden" type="file" accept="image/*" onChange={(e) => pickCmsImage("item", e.target.files?.[0])} />
-                  </label>
-                </div>
-                <input className={inputClass} placeholder="Video URL" value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
-                <input className={inputClass} placeholder="Link Label" value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
-                <input className={inputClass} placeholder="Link URL" value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
-                <input className={inputClass} placeholder="Tags (comma separated)" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
+      {currentSection && (
+        <div ref={sectionItemsPanelRef} className={`${panelClass} p-5 mt-6 scroll-mt-28`}>
+          <h3 className="text-white font-bebas text-3xl mb-4">SECTION ITEMS ({capitalizeFirst(currentSection.sectionKey)})</h3>
+          <div className="mb-6 flex items-center justify-end gap-3">
+            {!showItemForm ? (
+              <button className={actionClass} onClick={startAddItem}><Save size={16} /> ADD ITEM</button>
+            ) : (
+              <button className={ghostClass} onClick={cancelItemForm}>CANCEL</button>
+            )}
+          </div>
+          {showItemForm && (
+            <div ref={itemFormRef} className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 scroll-mt-28">
+                <LabeledInput label="Item Key" caption="Enter the unique item key inside the selected CMS section." value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
+                <LabeledInput label="Title" caption="Enter the item title shown in this section." value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
+                <LabeledInput label="Subtitle" caption="Enter optional supporting text for this item." value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
+                <FileUrlField
+                  label="Image"
+                  caption="Paste an item image URL or choose an image file from your device."
+                  value={itemForm.imageUrl}
+                  fileName={itemImageFileName}
+                  onTextChange={(value) => {
+                    setItemImageFileName("");
+                    setItemForm({ ...itemForm, imageUrl: value });
+                  }}
+                  onFileChange={(file) => pickCmsImage("item", file)}
+                />
+                <LabeledInput label="Video URL" caption="Paste an optional video URL for this item." value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
+                <LabeledInput label="Link Label" caption="Enter the text shown for this item's link." value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
+                <LabeledInput label="Link URL" caption="Enter the destination URL for this item's link." value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
+                <LabeledInput label="Tags" caption="Enter tags separated by commas for filtering or metadata." value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
                 <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
                   <input type="checkbox" checked={itemForm.active} onChange={(e) => setItemForm({ ...itemForm, active: e.target.checked })} />
                   Active
                 </label>
-                <textarea className={`${inputClass} md:col-span-2`} placeholder="Description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
+                <LabeledTextarea label="Description" caption="Write the item description displayed in this CMS section." className="md:col-span-2" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
                 <button className={actionClass} onClick={saveItem}><Save size={16} /> {editingItemId ? "UPDATE" : "ADD"} ITEM</button>
-              </div>
-            )}
+            </div>
+          )}
 
-            <AdminTable
-              rows={currentSection.items ?? []}
-              columns={["itemKey", "title", "active"]}
-              formatCell={(_, column, value) => {
-                if (column === "itemKey") {
-                  return capitalizeFirst(String(value ?? ""));
-                }
-                if (column === "active") {
-                  return value ? "Active" : "Inactive";
-                }
-                return undefined;
-              }}
-              actions={(row) => (
-                <>
-                  <button className={compactActionClass} onClick={() => {
-                    setEditingItemId(row.id);
-                    setItemForm({
-                      itemKey: row.itemKey ?? "",
-                      title: row.title ?? "",
-                      subtitle: row.subtitle ?? "",
-                      description: row.description ?? "",
-                      imageUrl: row.imageUrl ?? "",
-                      videoUrl: row.videoUrl ?? "",
-                      linkLabel: row.linkLabel ?? "",
-                      linkUrl: row.linkUrl ?? "",
-                      tags: Array.isArray(row.tags) ? row.tags.join(",") : "",
-                      active: row.active ?? true,
-                    });
-                    setItemImageFileName("");
-                    setShowItemForm(true);
-                  }}>EDIT</button>
-                  <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/items/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
-                </>
-              )}
-            />
-          </>
-        )}
-      </div>
+          <AdminTable
+            rows={currentSection.items ?? []}
+            columns={["itemKey", "title", "active"]}
+            formatCell={(_, column, value) => {
+              if (column === "itemKey") {
+                return capitalizeFirst(String(value ?? ""));
+              }
+              if (column === "active") {
+                return value ? "Active" : "Inactive";
+              }
+              return undefined;
+            }}
+            actions={(row) => (
+              <>
+                <button className={compactActionClass} onClick={() => {
+                  setEditingItemId(row.id);
+                  setItemForm({
+                    itemKey: row.itemKey ?? "",
+                    title: row.title ?? "",
+                    subtitle: row.subtitle ?? "",
+                    description: row.description ?? "",
+                    imageUrl: row.imageUrl ?? "",
+                    videoUrl: row.videoUrl ?? "",
+                    linkLabel: row.linkLabel ?? "",
+                    linkUrl: row.linkUrl ?? "",
+                    tags: Array.isArray(row.tags) ? row.tags.join(",") : "",
+                    active: row.active ?? true,
+                  });
+                  setItemImageFileName("");
+                  setShowItemForm(true);
+                  scrollToForm(itemFormRef);
+                }}>EDIT</button>
+                <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/items/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
+              </>
+            )}
+          />
+        </div>
+      )}
     </CrudLayout>
   );
 }
@@ -1419,7 +1670,7 @@ function SimpleForm({ fields, form, setForm, onSave, saveLabel, disabledId }: { 
   return (
     <div className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3`}>
       {fields.map((key) => (
-        <input key={key} className={inputClass} placeholder={key} value={form[key] ?? ""} disabled={disabledId === key} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+        <LabeledInput key={key} label={toDisplayLabel(key)} caption={`Enter the ${toDisplayLabel(key).toLowerCase()} value.`} value={form[key] ?? ""} disabled={disabledId === key} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
       ))}
       <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
         <input type="checkbox" checked={form.active ?? true} onChange={(e) => setForm({ ...form, active: e.target.checked })} />

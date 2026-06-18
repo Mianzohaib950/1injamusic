@@ -393,22 +393,22 @@ export default function Home() {
         {/* Bottom fade */}
         <div className="absolute inset-x-0 bottom-0 h-48 z-0 bg-gradient-to-t from-[var(--brand-black)] to-transparent" />
 
-        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto flex flex-col items-center pb-16 md:pb-14">
-          <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
+        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto flex flex-col items-center pb-28 md:pb-24 lg:pb-28">
+          <h1 ref={heroTextRef1} className="text-white text-4xl md:text-6xl lg:text-[5.25rem] xl:text-[5.8rem] leading-[1.02] font-bebas">
             {splitText(heroLine1)}
           </h1>
-          <h1 ref={heroTextRef2} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
+          <h1 ref={heroTextRef2} className="text-white text-4xl md:text-6xl lg:text-[5.25rem] xl:text-[5.8rem] leading-[1.02] font-bebas">
             {splitText(`${heroLine2} `)}<span className=" relative inline-block border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight2)}</span>
           </h1>
-          <h1 ref={heroTextRef3} className="text-white text-4xl md:text-6xl lg:text-[5.8rem] leading-[1.02] font-bebas">
+          <h1 ref={heroTextRef3} className="text-white text-4xl md:text-6xl lg:text-[5.25rem] xl:text-[5.8rem] leading-[1.02] font-bebas">
             {splitText(`${heroLine3} `)}<span className="border-b-4 border-[#e5fe0b]" style={{color:"#e5fe0b"}}>{splitText(heroHighlight3)}</span>
           </h1>
 
-          <p className="mt-6 text-[var(--brand-gray)] text-lg md:text-xl font-sans max-w-2xl">
+          <p className="mt-4 text-[var(--brand-gray)] text-lg md:text-xl font-sans max-w-2xl">
             {heroDescription}
           </p>
 
-          <div className="mt-6 flex flex-col items-center text-[var(--brand-yellow)] gap-2">
+          <div className="mt-4 flex flex-col items-center text-[var(--brand-yellow)] gap-1">
             <span className="font-bebas tracking-widest text-sm opacity-60">SCROLL</span>
             <ChevronDown className="animate-bounce" />
           </div>
