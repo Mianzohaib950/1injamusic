@@ -1292,7 +1292,7 @@ function CmsPanel() {
             <input type="checkbox" checked={sectionForm.active} onChange={(e) => setSectionForm({ ...sectionForm, active: e.target.checked })} />
             Active
           </label>
-          <LabeledTextarea label="Description" caption="Write the main body copy for this CMS section." className="md:col-span-2" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
+          <LabeledTextarea label="Description" caption="Add the content that appears under this CMS section heading." className="md:col-span-2" value={sectionForm.body} onChange={(e) => setSectionForm({ ...sectionForm, body: e.target.value })} />
           <button className={actionClass} onClick={saveSection}><Save size={16} /> {editingSectionId ? "UPDATE" : "ADD"} SECTION</button>
         </div>
       )}
