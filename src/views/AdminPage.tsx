@@ -47,6 +47,7 @@ const ghostClass =
 const selectClass = `${inputClass} appearance-none pr-10 cursor-pointer`;
 const cmsSectionTypeOptions = ["hero", "content", "list", "gallery", "video", "marquee", "footer"];
 const productCategoryOptions = ["tee", "hoodie", "cap", "vinyl", "poster", "bundle"];
+const productSizeOptions = ["S", "M", "L", "XL", "XXL"];
 const artistSortOrderOptions = Array.from({ length: 21 }, (_, index) => index);
 const ADMIN_CACHE_TTL_MS = 60_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
@@ -253,7 +254,7 @@ function FieldShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`text-[var(--brand-gray)] font-sans text-sm ${className}`}>
+    <div className={`text-[var(--brand-gray)] font-sans text-xs ${className}`}>
       <p className="mb-2">{label}</p>
       {children}
       <p className="mt-1 text-xs leading-snug text-[var(--brand-gray)]/75">{caption}</p>
@@ -293,6 +294,32 @@ function LabeledTextarea({
   return (
     <FieldShell label={label} caption={caption} className={className}>
       <textarea {...props} className={`${inputClass} ${textareaClassName}`} />
+    </FieldShell>
+  );
+}
+
+function MoneyInput({
+  label,
+  caption,
+  value,
+  onChange,
+}: {
+  label: string;
+  caption: string;
+  value: string | number;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <FieldShell label={label} caption={caption}>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--brand-yellow)] font-sans">$</span>
+        <input
+          className={`${inputClass} pl-7`}
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
     </FieldShell>
   );
 }
@@ -432,7 +459,6 @@ function ProductsPanel() {
   const [editingId, setEditingId] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [imageFileName, setImageFileName] = useState("");
-  const [hoverImageFileName, setHoverImageFileName] = useState("");
   const [autoProductSlug, setAutoProductSlug] = useState(true);
   const [autoProductBadge, setAutoProductBadge] = useState(true);
   const productFormRef = useRef<HTMLDivElement>(null);
@@ -455,15 +481,22 @@ function ProductsPanel() {
     if (form.category) options.add(String(form.category));
     return Array.from(options);
   }, [data, form.category]);
+  const selectedProductSizes = useMemo(
+    () => String(form.sizes ?? "").split(",").map((size) => size.trim()).filter(Boolean),
+    [form.sizes],
+  );
 
-  const pickImage = (field: "image" | "imageHover", file?: File) => {
+  const updateProductImage = (image: string) => {
+    setForm((current: any) => ({ ...current, image, imageHover: image }));
+  };
+
+  const pickProductImage = (file?: File) => {
     if (!file) return;
-    if (field === "image") setImageFileName(file.name);
-    if (field === "imageHover") setHoverImageFileName(file.name);
+    setImageFileName(file.name);
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
-      setForm((current: any) => ({ ...current, [field]: result }));
+      updateProductImage(result);
     };
     reader.readAsDataURL(file);
   };
@@ -471,6 +504,7 @@ function ProductsPanel() {
   const save = async () => {
     const payload = {
       ...form,
+      imageHover: form.image,
       price: Number(form.price),
       originalPrice: form.originalPrice === "" ? null : Number(form.originalPrice),
       sizes: String(form.sizes).split(",").map((size) => size.trim()).filter(Boolean),
@@ -479,7 +513,6 @@ function ProductsPanel() {
     else await apiPost("/admin/products", payload);
     setForm(blank);
     setImageFileName("");
-    setHoverImageFileName("");
     setEditingId("");
     setAutoProductSlug(true);
     setAutoProductBadge(true);
@@ -491,7 +524,6 @@ function ProductsPanel() {
     setForm(blank);
     setEditingId("");
     setImageFileName("");
-    setHoverImageFileName("");
     setAutoProductSlug(true);
     setAutoProductBadge(true);
     setShowForm(true);
@@ -501,7 +533,6 @@ function ProductsPanel() {
     setForm(blank);
     setEditingId("");
     setImageFileName("");
-    setHoverImageFileName("");
     setAutoProductSlug(true);
     setAutoProductBadge(true);
     setShowForm(false);
@@ -525,6 +556,14 @@ function ProductsPanel() {
     }));
   };
 
+  const toggleProductSize = (size: string, checked: boolean) => {
+    const nextSizes = checked
+      ? Array.from(new Set([...selectedProductSizes, size]))
+      : selectedProductSizes.filter((item) => item !== size);
+    const sortedSizes = productSizeOptions.filter((item) => nextSizes.includes(item));
+    setForm({ ...form, sizes: sortedSizes.join(",") });
+  };
+
   return (
     <CrudLayout title="PRODUCTS" loading={loading || artistsLoading} error={error || artistsError}>
       <div className="mb-6 flex items-center justify-end gap-3">
@@ -540,12 +579,34 @@ function ProductsPanel() {
       </div>
       {showForm && (
         <div ref={productFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
-          <LabeledInput label="Product Slug" caption="Auto-fills from Product Name; edit it before saving if a custom slug is needed." value={form.id ?? ""} onChange={(e) => { setAutoProductSlug(false); setForm({ ...form, id: e.target.value }); }} disabled={!!editingId} />
+          <LabeledInput label="Product Slug" caption="URL-friendly product ID. Use lowercase letters, numbers, and hyphens only; no spaces." value={form.id ?? ""} onChange={(e) => { setAutoProductSlug(false); setForm({ ...form, id: e.target.value }); }} disabled={!!editingId} />
           <LabeledInput label="Product Name" caption="Enter the public product name; slug and badge will auto-fill from this." value={form.name ?? ""} onChange={(e) => updateProductName(e.target.value)} />
-          <LabeledInput label="Image URL" caption="Paste the main product image URL, or use the file picker below." value={form.image ?? ""} onChange={(e) => setForm({ ...form, image: e.target.value })} />
-          <LabeledInput label="Hover Image URL" caption="Paste the alternate image shown when customers hover the product." value={form.imageHover ?? ""} onChange={(e) => setForm({ ...form, imageHover: e.target.value })} />
+          <FileUrlField
+            label="Product Image"
+            caption="Paste one product image URL or choose an image file from your device."
+            value={form.image ?? ""}
+            fileName={imageFileName}
+            onTextChange={(value) => {
+              setImageFileName("");
+              updateProductImage(value);
+            }}
+            onFileChange={pickProductImage}
+          />
           <LabeledInput label="Badge" caption="Auto-suggests NEW, LIMITED, or SALE from Product Name; edit if needed." value={form.badge ?? ""} onChange={(e) => { setAutoProductBadge(false); setForm({ ...form, badge: e.target.value }); }} />
-          <LabeledInput label="Sizes" caption="Enter available sizes separated by commas, for example S,M,L,XL." value={form.sizes ?? ""} onChange={(e) => setForm({ ...form, sizes: e.target.value })} />
+          <FieldShell label="Sizes" caption="Select all sizes available for this product.">
+            <div className="grid grid-cols-5 gap-2">
+              {productSizeOptions.map((size) => (
+                <label key={size} className="flex h-10 items-center justify-center gap-2 border border-[#333] bg-[#111] text-white font-bebas tracking-widest cursor-pointer hover:border-[var(--brand-yellow)]">
+                  <input
+                    type="checkbox"
+                    checked={selectedProductSizes.includes(size)}
+                    onChange={(e) => toggleProductSize(size, e.target.checked)}
+                  />
+                  {size}
+                </label>
+              ))}
+            </div>
+          </FieldShell>
           <DropdownField label="Artist Name" caption="Choose the artist connected to this product." value={form.artistSlug ?? ""} onChange={selectProductArtist}>
             <option value="" disabled>Select artist</option>
             {artistOptions.map((artist) => (
@@ -557,22 +618,8 @@ function ProductsPanel() {
               <option key={category} value={category}>{capitalizeFirst(category)}</option>
             ))}
           </DropdownField>
-          <FieldShell label="Image File" caption="Upload a main product image from your device when you do not want to paste a URL.">
-            <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
-              <span className="text-white text-sm">{imageFileName || "No file selected"}</span>
-              <span className={ghostClass}>Choose</span>
-              <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("image", e.target.files?.[0])} />
-            </label>
-          </FieldShell>
-          <FieldShell label="Hover Image File" caption="Upload the optional alternate product image for hover state.">
-            <label className={`${inputClass} mt-2 flex items-center justify-between cursor-pointer`}>
-              <span className="text-white text-sm">{hoverImageFileName || "No file selected"}</span>
-              <span className={ghostClass}>Choose</span>
-              <input className="hidden" type="file" accept="image/*" onChange={(e) => pickImage("imageHover", e.target.files?.[0])} />
-            </label>
-          </FieldShell>
-          <LabeledInput label="Price" caption="Enter the current selling price as a number." type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-          <LabeledInput label="Original Price" caption="Enter the compare-at price, or leave blank when there is no discount." type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} />
+          <MoneyInput label="Price" caption="Enter the current selling price in USD." value={form.price} onChange={(value) => setForm({ ...form, price: value })} />
+          <MoneyInput label="Original Price" caption="Enter the compare-at price in USD, or leave blank when there is no discount." value={form.originalPrice} onChange={(value) => setForm({ ...form, originalPrice: value })} />
           <LabeledTextarea label="Description" caption="Write the product description shown on the product detail page." className="md:col-span-2" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
             <input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />
@@ -590,7 +637,7 @@ function ProductsPanel() {
         }}
         actions={(row) => (
           <>
-            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setHoverImageFileName(""); setAutoProductSlug(false); setAutoProductBadge(false); setShowForm(true); scrollToForm(productFormRef); }}>EDIT</button>
+            <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, imageHover: row.image ?? row.imageHover ?? "", sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setAutoProductSlug(false); setAutoProductBadge(false); setShowForm(true); scrollToForm(productFormRef); }}>EDIT</button>
             <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/products/${row.id}`); await reload(); }}><Trash2 size={14} /></button>
           </>
         )}
@@ -659,7 +706,7 @@ function ArtistsPanel() {
       </div>
       {showForm && (
         <div ref={artistFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
-          <LabeledInput label="Slug" caption="Enter the URL-safe artist slug; it cannot be changed while editing." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+          <LabeledInput label="Slug" caption="URL-friendly artist name used in the page address. Use lowercase letters, numbers, and hyphens only." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
           <LabeledInput label="Name" caption="Enter the artist name shown across the website." value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <LabeledInput label="Genres" caption="Enter genres separated by commas, for example Dancehall,Hip-Hop." value={form.genres ?? ""} onChange={(e) => setForm({ ...form, genres: e.target.value })} />
           <LabeledInput label="Bio" caption="Write a short artist biography for the artist page." value={form.bio ?? ""} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
@@ -1070,19 +1117,19 @@ function CmsPanel() {
             ))}
           </DropdownField>
           {!showPageForm && (
-            <div className="pt-[29px]">
+            <div className="pt-[24px]">
               <button className={actionClass} onClick={startAddPage}><Save size={16} /> ADD PAGE</button>
             </div>
           )}
         </div>
         {showPageForm && (
           <div className="mt-4 border-t border-[#222] pt-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-3 items-start">
-            <LabeledInput label="New Page Key" caption="Enter the URL-safe key used for this CMS page." value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
+            <LabeledInput label="New Page Key" caption="Internal page identifier used in the URL. Use lowercase letters, numbers, and hyphens; no spaces." value={newPageKey} onChange={(e) => setNewPageKey(e.target.value)} />
             <LabeledInput label="New Page Title" caption="Enter the title shown for this CMS page in admin and page data." value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} />
-            <div className="pt-[29px]">
+            <div className="pt-[24px]">
               <button className={actionClass} onClick={addPage}><Save size={16} /> SAVE PAGE</button>
             </div>
-            <div className="pt-[29px]">
+            <div className="pt-[24px]">
               <button className={ghostClass} onClick={cancelPageForm}>CANCEL</button>
             </div>
           </div>
@@ -1173,7 +1220,7 @@ function CmsPanel() {
 
       {showSectionForm && (
         <div ref={sectionFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
-          <LabeledInput label="Section Key" caption="Auto-fills from Title; edit it before saving if a custom key is needed." value={sectionForm.sectionKey} onChange={(e) => { setAutoSectionKey(false); setSectionForm({ ...sectionForm, sectionKey: e.target.value }); }} disabled={!!editingSectionId} />
+          <LabeledInput label="Section Key" caption="Internal section identifier. Auto-fills from Title; use lowercase letters, numbers, and underscores." value={sectionForm.sectionKey} onChange={(e) => { setAutoSectionKey(false); setSectionForm({ ...sectionForm, sectionKey: e.target.value }); }} disabled={!!editingSectionId} />
           <DropdownField label="Section Type" caption="Choose the layout behavior for this CMS section." value={sectionForm.sectionType} onChange={(value) => setSectionForm({ ...sectionForm, sectionType: value })}>
             {sectionTypeOptions.map((sectionType) => (
               <option key={sectionType} value={sectionType}>{capitalizeFirst(sectionType)}</option>
@@ -1255,7 +1302,7 @@ function CmsPanel() {
           </div>
           {showItemForm && (
             <div ref={itemFormRef} className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 scroll-mt-28">
-                <LabeledInput label="Item Key" caption="Enter the unique item key inside the selected CMS section." value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
+                <LabeledInput label="Item Key" caption="Internal item identifier within this section. Use lowercase letters, numbers, and hyphens or underscores." value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
                 <LabeledInput label="Title" caption="Enter the item title shown in this section." value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} />
                 <LabeledInput label="Subtitle" caption="Enter optional supporting text for this item." value={itemForm.subtitle} onChange={(e) => setItemForm({ ...itemForm, subtitle: e.target.value })} />
                 <FileUrlField
@@ -1272,7 +1319,7 @@ function CmsPanel() {
                 <LabeledInput label="Video URL" caption="Paste an optional video URL for this item." value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
                 <LabeledInput label="Link Label" caption="Enter the text shown for this item's link." value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
                 <LabeledInput label="Link URL" caption="Enter the destination URL for this item's link." value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
-                <LabeledInput label="Tags" caption="Enter tags separated by commas for filtering or metadata." value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
+                <LabeledInput label="Tags" caption="Optional keywords for grouping or metadata. Separate each tag with a comma, for example featured,home." value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
                 <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
                   <input type="checkbox" checked={itemForm.active} onChange={(e) => setItemForm({ ...itemForm, active: e.target.checked })} />
                   Active
