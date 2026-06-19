@@ -381,6 +381,58 @@ function DropdownField({
   );
 }
 
+function CheckboxDropdownField({
+  label,
+  caption,
+  options,
+  selectedValues,
+  onToggle,
+  placeholder = "Select options",
+}: {
+  label: string;
+  caption: string;
+  options: string[];
+  selectedValues: string[];
+  onToggle: (value: string, checked: boolean) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedText = selectedValues.length > 0 ? selectedValues.join(", ") : placeholder;
+
+  return (
+    <FieldShell label={label} caption={caption}>
+      <div className="relative">
+        <button
+          type="button"
+          className={`${inputClass} flex items-center justify-between text-left`}
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+        >
+          <span className={selectedValues.length > 0 ? "text-white" : "text-[var(--brand-gray)]"}>{selectedText}</span>
+          <ChevronDown className={`h-4 w-4 text-[var(--brand-yellow)] transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {open && (
+          <div className="absolute left-0 right-0 top-full z-40 mt-2 border border-[#333] bg-[#111] p-2 shadow-2xl">
+            {options.map((option) => (
+              <label
+                key={option}
+                className="flex items-center gap-3 px-3 py-3 text-white font-bebas tracking-widest cursor-pointer hover:bg-white/5"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedValues.includes(option)}
+                  onChange={(e) => onToggle(option, e.target.checked)}
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+    </FieldShell>
+  );
+}
+
 function Dashboard() {
   const { data, loading, error } = useAdminData<any>("/admin/dashboard", null);
   const statusEntries = useMemo(() => {
@@ -593,20 +645,14 @@ function ProductsPanel() {
             onFileChange={pickProductImage}
           />
           <LabeledInput label="Badge" caption="Auto-suggests NEW, LIMITED, or SALE from Product Name; edit if needed." value={form.badge ?? ""} onChange={(e) => { setAutoProductBadge(false); setForm({ ...form, badge: e.target.value }); }} />
-          <FieldShell label="Sizes" caption="Select all sizes available for this product.">
-            <div className="grid grid-cols-5 gap-2">
-              {productSizeOptions.map((size) => (
-                <label key={size} className="flex h-10 items-center justify-center gap-2 border border-[#333] bg-[#111] text-white font-bebas tracking-widest cursor-pointer hover:border-[var(--brand-yellow)]">
-                  <input
-                    type="checkbox"
-                    checked={selectedProductSizes.includes(size)}
-                    onChange={(e) => toggleProductSize(size, e.target.checked)}
-                  />
-                  {size}
-                </label>
-              ))}
-            </div>
-          </FieldShell>
+          <CheckboxDropdownField
+            label="Sizes"
+            caption="Open the menu and select all sizes available for this product."
+            options={productSizeOptions}
+            selectedValues={selectedProductSizes}
+            onToggle={toggleProductSize}
+            placeholder="Select sizes"
+          />
           <DropdownField label="Artist Name" caption="Choose the artist connected to this product." value={form.artistSlug ?? ""} onChange={selectProductArtist}>
             <option value="" disabled>Select artist</option>
             {artistOptions.map((artist) => (
