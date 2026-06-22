@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { categories } from "@/data/merch";
 import { merchProducts } from "@/data/merch";
@@ -16,6 +16,7 @@ gsap.registerPlugin(ScrollTrigger);
 
 export default function ShopPage() {
   const sizeOptions = ["S", "M", "L", "XL"] as const;
+  const baseCategoryOrder = ["TEE", "HOODIE", "CAP", "VINYL", "POSTER", "BUNDLE"];
   const [searchParams] = useSearchParams();
   const [activeArtist, setActiveArtist] = useState("All Artists");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -43,7 +44,12 @@ export default function ShopPage() {
       const category = String(product.category ?? "").trim();
       if (category) options.add(category.toUpperCase());
     });
-    return Array.from(options);
+    const merged = Array.from(options);
+    const orderedBase = baseCategoryOrder.filter((category) => merged.includes(category));
+    const extras = merged
+      .filter((category) => !baseCategoryOrder.includes(category))
+      .sort((a, b) => a.localeCompare(b));
+    return [...orderedBase, ...extras];
   }, [products, shopCategories]);
   const productMaxPrice = useMemo(
     () => Math.max(0, ...products.map((product) => Math.ceil(Number(product.price) || 0))),
@@ -55,6 +61,9 @@ export default function ShopPage() {
   const priceMinPercent = (selectedMinPrice / rangeMax) * 100;
   const priceMaxPercent = (selectedMaxPrice / rangeMax) * 100;
   const priceRangeActive = priceRangeTouched && (selectedMinPrice > 0 || selectedMaxPrice < productMaxPrice);
+  const categoryFilterLabel = selectedCategories.length === 0 ? "All Categories" : `${selectedCategories.length} Selected`;
+  const sizeFilterLabel = selectedSizes.length === 0 ? "All Sizes" : `${selectedSizes.length} Selected`;
+  const artistFilterLabel = activeArtist === "All Artists" ? "All Artists" : activeArtist;
 
   const filtered = useMemo(
     () => products.filter((p) => {
@@ -313,110 +322,98 @@ export default function ShopPage() {
 
       {/* FILTERS */}
       <section className="sticky top-[72px] z-30 bg-[#0A0A0A]/95 backdrop-blur-xl border-b border-[#222] px-6 md:px-12 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          {/* Category checkboxes */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <SlidersHorizontal size={16} className="text-[var(--brand-yellow)] flex-shrink-0" />
-            <label
-              className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-1 font-bebas text-base tracking-widest transition-all duration-150 ${
-                selectedCategories.length === 0
-                  ? "border-[var(--brand-yellow)] bg-[var(--brand-yellow)] text-black"
-                  : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={selectedCategories.length === 0}
-                onChange={() => setSelectedCategories([])}
-                className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
-              />
-              ALL
-            </label>
-            {categoryOptions.map((cat) => {
-              const checked = selectedCategories.includes(cat);
-              return (
-                <label
-                  key={cat}
-                  className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-1 font-bebas text-base tracking-widest transition-all duration-150 ${
-                    checked
-                      ? "border-[var(--brand-yellow)] bg-[var(--brand-yellow)] text-black"
-                      : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
-                  }`}
-                >
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2">
+          <SlidersHorizontal size={16} className="text-[var(--brand-yellow)] mr-1" />
+
+          <details className="group relative">
+            <summary className="list-none inline-flex min-w-[170px] cursor-pointer items-center justify-between gap-2 border border-[#333] px-3 py-2 font-bebas text-sm tracking-widest text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]">
+              <span>CATEGORY: {categoryFilterLabel}</span>
+              <ChevronDown className="h-4 w-4 text-[var(--brand-yellow)] transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="absolute left-0 top-full mt-2 z-40 w-[220px] border border-[#333] bg-[#111] p-2">
+              <label className="flex cursor-pointer items-center gap-2 px-2 py-2 font-bebas text-sm tracking-widest text-white hover:bg-white/5">
+                <input
+                  type="checkbox"
+                  checked={selectedCategories.length === 0}
+                  onChange={() => setSelectedCategories([])}
+                  className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
+                />
+                ALL CATEGORIES
+              </label>
+              {categoryOptions.map((cat) => (
+                <label key={cat} className="flex cursor-pointer items-center gap-2 px-2 py-2 font-bebas text-sm tracking-widest text-white hover:bg-white/5">
                   <input
                     type="checkbox"
-                    checked={checked}
+                    checked={selectedCategories.includes(cat)}
                     onChange={() => toggleCategory(cat)}
                     className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
                   />
                   {cat}
                 </label>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </details>
 
-          {/* Artist select */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {artists.map((a) => (
-              <button
-                key={a}
-                onClick={() => setActiveArtist(a)}
-                className={`font-bebas text-base tracking-widest px-4 py-1 border transition-all duration-150 rounded-full ${
-                  activeArtist === a
-                    ? "border-[var(--brand-green)] bg-[var(--brand-green)] text-black"
-                    : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-green)] hover:text-[var(--brand-green)]"
-                }`}
-              >
-                {a}
-              </button>
-            ))}
-          </div>
-        </div>
+          <label className="inline-flex min-w-[170px] items-center justify-between gap-2 border border-[#333] px-3 py-2 font-bebas text-sm tracking-widest text-[var(--brand-gray)] hover:border-[var(--brand-green)] hover:text-[var(--brand-green)]">
+            <span>ARTIST</span>
+            <select
+              value={activeArtist}
+              onChange={(event) => setActiveArtist(event.target.value)}
+              className="bg-transparent text-white focus:outline-none"
+            >
+              {artists.map((artist) => (
+                <option key={artist} value={artist} className="bg-[#111] text-white">
+                  {artist.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <div className="max-w-7xl mx-auto mt-4 flex flex-col gap-3 border-t border-[#222] pt-4 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3">
-            <span className="font-bebas text-sm tracking-widest text-[var(--brand-gray)]">AVAILABILITY</span>
-            <label className={`inline-flex cursor-pointer items-center gap-2 border px-3 py-1 font-bebas text-sm tracking-widest transition-all duration-150 ${
-              inStockOnly
-                ? "border-[var(--brand-green)] bg-[var(--brand-green)] text-black"
-                : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-green)] hover:text-[var(--brand-green)]"
-            }`}>
-              <input
-                type="checkbox"
-                checked={inStockOnly}
-                onChange={(event) => setInStockOnly(event.target.checked)}
-                className="h-3.5 w-3.5 accent-[var(--brand-green)]"
-              />
-              IN STOCK
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-bebas text-sm tracking-widest text-[var(--brand-gray)]">SIZE</span>
-            {sizeOptions.map((size) => {
-              const checked = selectedSizes.includes(size);
-              return (
-                <label
-                  key={size}
-                  className={`inline-flex cursor-pointer items-center gap-2 border px-3 py-1 font-bebas text-sm tracking-widest transition-all duration-150 ${
-                    checked
-                      ? "border-[var(--brand-yellow)] bg-[var(--brand-yellow)] text-black"
-                      : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
-                  }`}
-                >
+          <details className="group relative">
+            <summary className="list-none inline-flex min-w-[150px] cursor-pointer items-center justify-between gap-2 border border-[#333] px-3 py-2 font-bebas text-sm tracking-widest text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]">
+              <span>SIZE: {sizeFilterLabel}</span>
+              <ChevronDown className="h-4 w-4 text-[var(--brand-yellow)] transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="absolute left-0 top-full mt-2 z-40 w-[200px] border border-[#333] bg-[#111] p-2">
+              <label className="flex cursor-pointer items-center gap-2 px-2 py-2 font-bebas text-sm tracking-widest text-white hover:bg-white/5">
+                <input
+                  type="checkbox"
+                  checked={selectedSizes.length === 0}
+                  onChange={() => setSelectedSizes([])}
+                  className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
+                />
+                ALL SIZES
+              </label>
+              {sizeOptions.map((size) => (
+                <label key={size} className="flex cursor-pointer items-center gap-2 px-2 py-2 font-bebas text-sm tracking-widest text-white hover:bg-white/5">
                   <input
                     type="checkbox"
-                    checked={checked}
+                    checked={selectedSizes.includes(size)}
                     onChange={() => toggleSize(size)}
                     className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
                   />
                   {size}
                 </label>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </details>
+
+          <label className={`inline-flex cursor-pointer items-center gap-2 border px-3 py-2 font-bebas text-sm tracking-widest transition-all duration-150 ${
+            inStockOnly
+              ? "border-[var(--brand-green)] bg-[var(--brand-green)] text-black"
+              : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-green)] hover:text-[var(--brand-green)]"
+          }`}>
+            <input
+              type="checkbox"
+              checked={inStockOnly}
+              onChange={(event) => setInStockOnly(event.target.checked)}
+              className="h-3.5 w-3.5 accent-[var(--brand-green)]"
+            />
+            IN STOCK ONLY
+          </label>
         </div>
 
-        <div className="max-w-7xl mx-auto mt-4 flex flex-col gap-3 border-t border-[#222] pt-4 sm:flex-row sm:items-center">
+        <div className="max-w-7xl mx-auto mt-3 flex flex-col gap-3 border-t border-[#222] pt-3 sm:flex-row sm:items-center">
           <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-start">
             <span className="font-bebas text-sm tracking-widest text-[var(--brand-gray)]">PRICE RANGE</span>
             <span className="min-w-[88px] font-bebas text-base tracking-widest text-[var(--brand-yellow)]">

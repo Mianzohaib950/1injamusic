@@ -57,6 +57,24 @@ const ADMIN_CACHE_TTL_MS = 60_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
+const dashboardFallback = {
+  totals: {
+    users: 0,
+    orders: 0,
+    revenueCents: 0,
+    products: 0,
+    artists: 0,
+    bookings: 0,
+    eventContacts: 0,
+  },
+  ordersByStatus: {
+    Pending: 0,
+    Processing: 0,
+    Shipped: 0,
+    Delivered: 0,
+    Cancelled: 0,
+  },
+};
 
 function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -438,7 +456,7 @@ function CheckboxDropdownField({
 }
 
 function Dashboard() {
-  const { data, loading, error } = useAdminData<any>("/admin/dashboard", null);
+  const { data, loading, error } = useAdminData<any>("/admin/dashboard", dashboardFallback);
   const statusEntries = useMemo(() => {
     const byStatus = (data?.ordersByStatus ?? {}) as Record<string, number>;
     return [
@@ -450,45 +468,41 @@ function Dashboard() {
     ] as [string, number][];
   }, [data]);
 
-  const cards = data
-    ? [
-        ["USERS", data.totals.users],
-        ["ORDERS", data.totals.orders],
-        ["REVENUE", money(data.totals.revenueCents)],
-        ["PRODUCTS", data.totals.products],
-        ["ARTISTS", data.totals.artists],
-        ["BOOKINGS", data.totals.bookings],
-        ["EVENT CONTACT", data.totals.eventContacts],
-      ]
-    : [];
+  const cards = [
+    ["USERS", data.totals.users],
+    ["ORDERS", data.totals.orders],
+    ["REVENUE", money(data.totals.revenueCents)],
+    ["PRODUCTS", data.totals.products],
+    ["ARTISTS", data.totals.artists],
+    ["BOOKINGS", data.totals.bookings],
+    ["EVENT CONTACT", data.totals.eventContacts],
+  ];
 
   return (
     <div>
       <h2 className="text-white font-bebas text-4xl mb-6">DASHBOARD</h2>
       <StatusText loading={loading} error={error} />
-      {data && (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {cards.map(([label, value]) => (
-              <div key={label} className={`${panelClass} p-5`}>
-                <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-sm">{label}</p>
-                <p className="text-[var(--brand-yellow)] font-bebas text-4xl mt-1">{value}</p>
+      <>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {cards.map(([label, value]) => (
+            <div key={label} className={`${panelClass} p-5`}>
+              <p className="text-[var(--brand-gray)] font-bebas tracking-widest text-sm">{label}</p>
+              <p className="text-[var(--brand-yellow)] font-bebas text-4xl mt-1">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className={`${panelClass} p-5`}>
+          <h3 className="text-white font-bebas text-2xl mb-4">ORDER STATUS</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {statusEntries.map(([status, count]) => (
+              <div key={status} className="bg-[#111] border border-[#222] p-4">
+                <p className="text-[var(--brand-gray)] font-bebas tracking-widest">{status}</p>
+                <p className="text-white font-bebas text-3xl">{String(count)}</p>
               </div>
             ))}
           </div>
-          <div className={`${panelClass} p-5`}>
-            <h3 className="text-white font-bebas text-2xl mb-4">ORDER STATUS</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {statusEntries.map(([status, count]) => (
-                <div key={status} className="bg-[#111] border border-[#222] p-4">
-                  <p className="text-[var(--brand-gray)] font-bebas tracking-widest">{status}</p>
-                  <p className="text-white font-bebas text-3xl">{String(count)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+        </div>
+      </>
     </div>
   );
 }
