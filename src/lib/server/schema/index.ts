@@ -1,5 +1,6 @@
 export * from "./users";
 export * from "./addresses";
+export * from "./categories";
 export * from "./artists";
 export * from "./bookings";
 export * from "./eventContacts";

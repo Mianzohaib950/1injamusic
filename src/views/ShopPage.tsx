@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SlidersHorizontal, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { categories } from "@/data/merch";
+import { merchProducts } from "@/data/merch";
 import type { MerchProduct } from "@/data/merch";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
@@ -13,44 +14,90 @@ import { getCachedProducts, loadProductsCatalog } from "@/lib/productCatalogClie
 
 gsap.registerPlugin(ScrollTrigger);
 
-const CATS = ["All", ...categories.map((c) => c.toUpperCase())];
-
 export default function ShopPage() {
+  const sizeOptions = ["S", "M", "L", "XL"] as const;
   const [searchParams] = useSearchParams();
   const [activeArtist, setActiveArtist] = useState("All Artists");
-  const [activeCat, setActiveCat] = useState("All");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [quickProduct, setQuickProduct] = useState<MerchProduct | null>(null);
-  const [products, setProducts] = useState<MerchProduct[]>(() => getCachedProducts() ?? []);
-  const [productsLoading, setProductsLoading] = useState(() => !getCachedProducts());
+  const [products, setProducts] = useState<MerchProduct[]>(() => getCachedProducts() ?? merchProducts);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
+  const [priceRangeTouched, setPriceRangeTouched] = useState(false);
   const [heroTitle, setHeroTitle] = useState("OFFICIAL\nMERCH SHOP");
   const [heroBody, setHeroBody] = useState("Exclusive drops from Hintell, Dark Koko, Swazz & Mee$ch. Represent the movement.");
   const [heroSubtitle, setHeroSubtitle] = useState("");
   const [heroImage, setHeroImage] = useState("");
   const [contentTitle, setContentTitle] = useState("NEW DROPS EVERY MONTH");
   const [contentBody, setContentBody] = useState("Follow 1 Jamaica Music on Instagram for first access to limited drops and exclusive bundles.");
+  const [shopCategories, setShopCategories] = useState<string[]>(() => categories.map((category) => category.toUpperCase()));
   const gridRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
 
   const artists = ["All Artists", ...Array.from(new Set(products.map((product) => product.artist)))];
+  const categoryOptions = useMemo(() => {
+    const options = new Set(shopCategories);
+    products.forEach((product) => {
+      const category = String(product.category ?? "").trim();
+      if (category) options.add(category.toUpperCase());
+    });
+    return Array.from(options);
+  }, [products, shopCategories]);
+  const productMaxPrice = useMemo(
+    () => Math.max(0, ...products.map((product) => Math.ceil(Number(product.price) || 0))),
+    [products],
+  );
+  const rangeMax = Math.max(productMaxPrice, 1);
+  const selectedMinPrice = Math.min(priceRange[0], rangeMax);
+  const selectedMaxPrice = Math.min(priceRange[1] || rangeMax, rangeMax);
+  const priceMinPercent = (selectedMinPrice / rangeMax) * 100;
+  const priceMaxPercent = (selectedMaxPrice / rangeMax) * 100;
+  const priceRangeActive = priceRangeTouched && (selectedMinPrice > 0 || selectedMaxPrice < productMaxPrice);
 
-  const filtered = products.filter((p) => {
-    const artistMatch =
-      activeArtist === "All Artists" || p.artist === activeArtist;
-    const catMatch =
-      activeCat === "All" || p.category.toUpperCase() === activeCat;
-    return artistMatch && catMatch;
-  });
+  const filtered = useMemo(
+    () => products.filter((p) => {
+      const artistMatch =
+        activeArtist === "All Artists" || p.artist === activeArtist;
+      const catMatch =
+        selectedCategories.length === 0 || selectedCategories.includes(p.category.toUpperCase());
+      const price = Number(p.price) || 0;
+      const priceMatch = productMaxPrice <= 0 || (price >= selectedMinPrice && price <= selectedMaxPrice);
+      const stockBySize = p.stockBySize && typeof p.stockBySize === "object" ? p.stockBySize : undefined;
+      const hasAnyStockBySize = Boolean(stockBySize) && Object.values(stockBySize ?? {}).some((qty) => Number(qty) > 0);
+      const productInStock = Boolean(p.inStock) || hasAnyStockBySize;
+      const stockMatch = !inStockOnly || productInStock;
+      const sizeMatch =
+        selectedSizes.length === 0
+          ? true
+          : selectedSizes.some((size) => {
+            const hasSize = Array.isArray(p.sizes) && p.sizes.includes(size);
+            if (!hasSize) return false;
+            if (!stockBySize) return Boolean(p.inStock);
+            return Number(stockBySize[size] ?? 0) > 0;
+          });
+      return artistMatch && catMatch && priceMatch && stockMatch && sizeMatch;
+    }),
+    [activeArtist, inStockOnly, productMaxPrice, products, selectedCategories, selectedMaxPrice, selectedMinPrice, selectedSizes],
+  );
 
   useEffect(() => {
     let active = true;
     const loadProducts = async () => {
+      setProductsLoading(true);
       try {
-        const rows = await loadProductsCatalog();
+        const rows = await loadProductsCatalog({ force: Boolean(getCachedProducts()) });
         if (!active) return;
-        setProducts(rows);
+        setProducts((current) => {
+          if (Array.isArray(rows) && rows.length > 0) return rows;
+          return current.length > 0 ? current : merchProducts;
+        });
         setProductsLoading(false);
       } catch {
-        if (active) setProductsLoading(false);
+        if (!active) return;
+        setProducts((current) => (current.length > 0 ? current : merchProducts));
+        setProductsLoading(false);
       }
     };
     loadProducts();
@@ -58,6 +105,20 @@ export default function ShopPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (productMaxPrice <= 0) {
+      setPriceRange([0, 0]);
+      return;
+    }
+
+    setPriceRange(([min, max]) => {
+      if (!priceRangeTouched || max === 0) return [0, productMaxPrice];
+      const nextMin = Math.min(min, productMaxPrice);
+      const nextMax = Math.min(Math.max(max, nextMin), productMaxPrice);
+      return [nextMin, nextMax];
+    });
+  }, [productMaxPrice, priceRangeTouched]);
 
   useEffect(() => {
     let active = true;
@@ -85,6 +146,28 @@ export default function ShopPage() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const loadCategories = async () => {
+      try {
+        const rows = await apiGet<any[]>("/categories");
+        if (!active || !Array.isArray(rows)) return;
+        const options = rows
+          .map((row) => String(row.slug ?? "").trim().toUpperCase())
+          .filter(Boolean);
+        if (options.length > 0) {
+          setShopCategories(options);
+        }
+      } catch {
+        // Keep fallback category list.
+      }
+    };
+    loadCategories();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const artistFromQuery = searchParams.get("artist");
     const categoryFromQuery = searchParams.get("category");
 
@@ -92,7 +175,7 @@ export default function ShopPage() {
       setActiveArtist(artistFromQuery);
     }
     if (categoryFromQuery) {
-      setActiveCat(categoryFromQuery.toUpperCase());
+      setSelectedCategories([categoryFromQuery.toUpperCase()]);
     }
   }, [searchParams]);
 
@@ -150,6 +233,46 @@ export default function ShopPage() {
     return ["OFFICIAL", "MERCH SHOP"];
   })();
 
+  const updateMinPrice = (value: number) => {
+    setPriceRangeTouched(true);
+    setPriceRange(([, max]) => {
+      const nextMax = max || rangeMax;
+      return [Math.min(value, nextMax), nextMax];
+    });
+  };
+
+  const updateMaxPrice = (value: number) => {
+    setPriceRangeTouched(true);
+    setPriceRange(([min]) => [min, Math.max(value, min)]);
+  };
+
+  const resetPriceRange = () => {
+    setPriceRangeTouched(false);
+    setPriceRange([0, productMaxPrice]);
+  };
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories((current) =>
+      current.includes(category)
+        ? current.filter((item) => item !== category)
+        : [...current, category],
+    );
+  };
+
+  const removeCategory = (category: string) => {
+    setSelectedCategories((current) => current.filter((item) => item !== category));
+  };
+
+  const toggleSize = (size: string) => {
+    setSelectedSizes((current) =>
+      current.includes(size) ? current.filter((item) => item !== size) : [...current, size],
+    );
+  };
+
+  const removeSize = (size: string) => {
+    setSelectedSizes((current) => current.filter((item) => item !== size));
+  };
+
   return (
     <main className="w-full bg-[var(--brand-black)] min-h-screen">
       <QuickAddModal product={quickProduct} onClose={() => setQuickProduct(null)} />
@@ -191,22 +314,45 @@ export default function ShopPage() {
       {/* FILTERS */}
       <section className="sticky top-[72px] z-30 bg-[#0A0A0A]/95 backdrop-blur-xl border-b border-[#222] px-6 md:px-12 py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          {/* Category pills */}
+          {/* Category checkboxes */}
           <div className="flex items-center gap-2 flex-wrap">
             <SlidersHorizontal size={16} className="text-[var(--brand-yellow)] flex-shrink-0" />
-            {CATS.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCat(cat)}
-                className={`font-bebas text-base tracking-widest px-4 py-1 border transition-all duration-150 ${
-                  activeCat === cat
-                    ? "border-[var(--brand-yellow)] bg-[var(--brand-yellow)] text-black"
-                    : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+            <label
+              className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-1 font-bebas text-base tracking-widest transition-all duration-150 ${
+                selectedCategories.length === 0
+                  ? "border-[var(--brand-yellow)] bg-[var(--brand-yellow)] text-black"
+                  : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selectedCategories.length === 0}
+                onChange={() => setSelectedCategories([])}
+                className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
+              />
+              ALL
+            </label>
+            {categoryOptions.map((cat) => {
+              const checked = selectedCategories.includes(cat);
+              return (
+                <label
+                  key={cat}
+                  className={`inline-flex cursor-pointer items-center gap-2 border px-4 py-1 font-bebas text-base tracking-widest transition-all duration-150 ${
+                    checked
+                      ? "border-[var(--brand-yellow)] bg-[var(--brand-yellow)] text-black"
+                      : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleCategory(cat)}
+                    className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
+                  />
+                  {cat}
+                </label>
+              );
+            })}
           </div>
 
           {/* Artist select */}
@@ -227,8 +373,97 @@ export default function ShopPage() {
           </div>
         </div>
 
+        <div className="max-w-7xl mx-auto mt-4 flex flex-col gap-3 border-t border-[#222] pt-4 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-3">
+            <span className="font-bebas text-sm tracking-widest text-[var(--brand-gray)]">AVAILABILITY</span>
+            <label className={`inline-flex cursor-pointer items-center gap-2 border px-3 py-1 font-bebas text-sm tracking-widest transition-all duration-150 ${
+              inStockOnly
+                ? "border-[var(--brand-green)] bg-[var(--brand-green)] text-black"
+                : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-green)] hover:text-[var(--brand-green)]"
+            }`}>
+              <input
+                type="checkbox"
+                checked={inStockOnly}
+                onChange={(event) => setInStockOnly(event.target.checked)}
+                className="h-3.5 w-3.5 accent-[var(--brand-green)]"
+              />
+              IN STOCK
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bebas text-sm tracking-widest text-[var(--brand-gray)]">SIZE</span>
+            {sizeOptions.map((size) => {
+              const checked = selectedSizes.includes(size);
+              return (
+                <label
+                  key={size}
+                  className={`inline-flex cursor-pointer items-center gap-2 border px-3 py-1 font-bebas text-sm tracking-widest transition-all duration-150 ${
+                    checked
+                      ? "border-[var(--brand-yellow)] bg-[var(--brand-yellow)] text-black"
+                      : "border-[#333] text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleSize(size)}
+                    className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
+                  />
+                  {size}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto mt-4 flex flex-col gap-3 border-t border-[#222] pt-4 sm:flex-row sm:items-center">
+          <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-start">
+            <span className="font-bebas text-sm tracking-widest text-[var(--brand-gray)]">PRICE RANGE</span>
+            <span className="min-w-[88px] font-bebas text-base tracking-widest text-[var(--brand-yellow)]">
+              ${selectedMinPrice} - ${selectedMaxPrice}
+            </span>
+          </div>
+          <div className="relative h-7 w-full sm:w-[340px] lg:w-[420px]">
+            <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 bg-[#333]" />
+            <div
+              className="absolute top-1/2 h-0.5 -translate-y-1/2 bg-[var(--brand-yellow)]"
+              style={{
+                left: `${priceMinPercent}%`,
+                right: `${100 - priceMaxPercent}%`,
+              }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={rangeMax}
+              step={1}
+              value={selectedMinPrice}
+              onChange={(event) => updateMinPrice(Number(event.target.value))}
+              className="pointer-events-none absolute inset-x-0 top-1/2 h-0.5 w-full -translate-y-1/2 appearance-none bg-transparent accent-[var(--brand-yellow)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-black [&::-webkit-slider-thumb]:bg-[var(--brand-yellow)] [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-black [&::-moz-range-thumb]:bg-[var(--brand-yellow)]"
+              aria-label="Minimum price"
+            />
+            <input
+              type="range"
+              min={0}
+              max={rangeMax}
+              step={1}
+              value={selectedMaxPrice}
+              onChange={(event) => updateMaxPrice(Number(event.target.value))}
+              className="pointer-events-none absolute inset-x-0 top-1/2 h-0.5 w-full -translate-y-1/2 appearance-none bg-transparent accent-[var(--brand-yellow)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-black [&::-webkit-slider-thumb]:bg-[var(--brand-yellow)] [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-black [&::-moz-range-thumb]:bg-[var(--brand-yellow)]"
+              aria-label="Maximum price"
+            />
+          </div>
+          <button
+            onClick={resetPriceRange}
+            disabled={!priceRangeActive}
+            className="w-fit font-bebas text-sm tracking-widest text-[var(--brand-gray)] hover:text-[var(--brand-yellow)] disabled:opacity-40 disabled:hover:text-[var(--brand-gray)]"
+          >
+            RESET
+          </button>
+        </div>
+
         {/* Active filter tags */}
-        {(activeArtist !== "All Artists" || activeCat !== "All") && (
+        {(activeArtist !== "All Artists" || selectedCategories.length > 0 || selectedSizes.length > 0 || inStockOnly || priceRangeActive) && (
           <div className="max-w-7xl mx-auto mt-3 flex items-center gap-2">
             <span className="text-[var(--brand-gray)] font-sans text-xs">Filtered:</span>
             {activeArtist !== "All Artists" && (
@@ -237,10 +472,28 @@ export default function ShopPage() {
                 <button onClick={() => setActiveArtist("All Artists")} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
               </span>
             )}
-            {activeCat !== "All" && (
+            {inStockOnly && (
               <span className="flex items-center gap-1 bg-[#1a1a1a] border border-[#333] text-white font-sans text-xs px-3 py-1">
-                {activeCat}
-                <button onClick={() => setActiveCat("All")} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
+                In Stock
+                <button onClick={() => setInStockOnly(false)} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
+              </span>
+            )}
+            {selectedCategories.map((category) => (
+              <span key={category} className="flex items-center gap-1 bg-[#1a1a1a] border border-[#333] text-white font-sans text-xs px-3 py-1">
+                {category}
+                <button onClick={() => removeCategory(category)} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
+              </span>
+            ))}
+            {selectedSizes.map((size) => (
+              <span key={size} className="flex items-center gap-1 bg-[#1a1a1a] border border-[#333] text-white font-sans text-xs px-3 py-1">
+                Size {size}
+                <button onClick={() => removeSize(size)} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
+              </span>
+            ))}
+            {priceRangeActive && (
+              <span className="flex items-center gap-1 bg-[#1a1a1a] border border-[#333] text-white font-sans text-xs px-3 py-1">
+                ${selectedMinPrice} - ${selectedMaxPrice}
+                <button onClick={resetPriceRange} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
               </span>
             )}
           </div>
@@ -257,7 +510,7 @@ export default function ShopPage() {
         </div>
 
         <motion.div
-          key={`${activeArtist}-${activeCat}`}
+          key={`${activeArtist}-${selectedCategories.join("-") || "All"}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}

@@ -11,11 +11,22 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 };
 
 function parseDataUrl(value: string) {
-  const match = value.match(/^data:([^;]+);base64,([\s\S]+)$/);
-  if (!match) return null;
+  if (!value.startsWith("data:")) return null;
+
+  const commaIndex = value.indexOf(",");
+  if (commaIndex < 0) return null;
+
+  const meta = value.slice(5, commaIndex);
+  const metaParts = meta.split(";").map((part) => part.trim().toLowerCase());
+  const mimeType = metaParts[0];
+  if (!mimeType || !metaParts.includes("base64")) return null;
+
+  const base64 = value.slice(commaIndex + 1).trim();
+  if (!base64) return null;
+
   return {
-    mimeType: match[1].toLowerCase(),
-    base64: match[2],
+    mimeType,
+    base64,
   };
 }
 

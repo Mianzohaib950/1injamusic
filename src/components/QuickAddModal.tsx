@@ -4,6 +4,7 @@ import { X, Minus, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import type { MerchProduct } from "@/data/merch";
+import { getLowStockLabel } from "@/lib/stock";
 
 interface QuickAddModalProps {
   product: MerchProduct | null;
@@ -16,6 +17,7 @@ export default function QuickAddModal({ product, onClose }: QuickAddModalProps) 
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState(false);
+  const lowStockLabel = product && selectedSize ? getLowStockLabel(product, selectedSize) : "";
 
   const handleAdd = () => {
     if (!product) return;
@@ -122,6 +124,11 @@ export default function QuickAddModal({ product, onClose }: QuickAddModalProps) 
                         </button>
                       ))}
                     </div>
+                    {lowStockLabel && (
+                      <p className="mt-2 inline-flex border border-[var(--brand-yellow)]/40 bg-[var(--brand-yellow)]/10 px-2.5 py-1 font-sans text-xs text-[var(--brand-yellow)]">
+                        {lowStockLabel}
+                      </p>
+                    )}
                   </div>
 
                   {/* Quantity */}

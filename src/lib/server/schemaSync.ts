@@ -27,6 +27,16 @@ export async function ensureServerSchema() {
         );`,
       );
       await pool.query(
+        `create table if not exists categories (
+          slug text primary key,
+          name text not null,
+          active boolean not null default true,
+          sort_order integer not null default 0,
+          created_at timestamp not null default now(),
+          updated_at timestamp not null default now()
+        );`,
+      );
+      await pool.query(
         `create table if not exists bookings (
           id text primary key,
           name text not null,
@@ -123,6 +133,30 @@ export async function ensureServerSchema() {
       await pool.query(`create index if not exists cms_items_sort_idx on cms_section_items (section_id, sort_order);`);
       await pool.query(`create index if not exists wishlists_user_id_idx on wishlists (user_id);`);
       await pool.query(`create index if not exists wishlists_product_id_idx on wishlists (product_id);`);
+      await pool.query(`create index if not exists categories_sort_idx on categories (sort_order, name);`);
+
+      await pool.query(
+        `insert into categories (slug, name, active, sort_order)
+         values
+          ('tee', 'Tee', true, 1),
+          ('hoodie', 'Hoodie', true, 2),
+          ('cap', 'Cap', true, 3),
+          ('vinyl', 'Vinyl', true, 4),
+          ('poster', 'Poster', true, 5),
+          ('bundle', 'Bundle', true, 6)
+         on conflict (slug) do nothing;`,
+      );
+      await pool.query(
+        `insert into categories (slug, name, active, sort_order)
+         select distinct
+           p.category as slug,
+           initcap(replace(p.category, '-', ' ')) as name,
+           true as active,
+           999 as sort_order
+         from products p
+         where p.category is not null and btrim(p.category) <> ''
+         on conflict (slug) do nothing;`,
+      );
 
       await pool.query(
         `insert into cms_pages (id, page_key, title, active)
@@ -206,7 +240,6 @@ export async function ensureServerSchema() {
          on conflict (id) do nothing;`,
       );
       await pool.query(`drop table if exists advertisements;`);
-      await pool.query(`drop table if exists categories;`);
     })();
   }
 

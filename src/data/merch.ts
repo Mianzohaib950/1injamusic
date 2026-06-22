@@ -3,7 +3,7 @@ export interface MerchProduct {
   name: string;
   artist: string;
   artistSlug: string;
-  category: "tee" | "hoodie" | "cap" | "vinyl" | "poster" | "bundle";
+  category: string;
   price: number;
   originalPrice: number | null;
   sizes: string[];
@@ -12,6 +12,7 @@ export interface MerchProduct {
   description: string;
   badge: "NEW" | "LIMITED" | "SALE" | null;
   inStock: boolean;
+  stockBySize?: Record<string, number>;
 }
 
 const IMG = (id: string, w = 600, h = 600) =>

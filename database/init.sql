@@ -55,6 +55,15 @@ create table if not exists artists (
   updated_at timestamp not null default now()
 );
 
+create table if not exists categories (
+  slug text primary key,
+  name text not null,
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamp not null default now(),
+  updated_at timestamp not null default now()
+);
+
 create table if not exists bookings (
   id text primary key,
   name text not null,
@@ -171,7 +180,6 @@ create table if not exists cms_section_items (
 );
 
 drop table if exists advertisements;
-drop table if exists categories;
 
 create index if not exists addresses_user_id_idx on addresses (user_id);
 create index if not exists artists_active_idx on artists (active);
@@ -181,6 +189,17 @@ create index if not exists orders_user_id_idx on orders (user_id);
 create index if not exists order_items_order_id_idx on order_items (order_id);
 create index if not exists wishlists_user_id_idx on wishlists (user_id);
 create index if not exists wishlists_product_id_idx on wishlists (product_id);
+create index if not exists categories_sort_idx on categories (sort_order, name);
+
+insert into categories (slug, name, active, sort_order)
+values
+  ('tee', 'Tee', true, 1),
+  ('hoodie', 'Hoodie', true, 2),
+  ('cap', 'Cap', true, 3),
+  ('vinyl', 'Vinyl', true, 4),
+  ('poster', 'Poster', true, 5),
+  ('bundle', 'Bundle', true, 6)
+on conflict (slug) do nothing;
 create index if not exists cms_pages_page_key_idx on cms_pages (page_key);
 create index if not exists cms_sections_page_id_idx on cms_sections (page_id);
 create index if not exists cms_sections_sort_idx on cms_sections (page_id, sort_order);

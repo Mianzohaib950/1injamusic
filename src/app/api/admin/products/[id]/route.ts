@@ -45,7 +45,9 @@ export async function PUT(
     const resolvedImage = image === undefined ? undefined : await uploadImageIfNeeded(image, "products/main");
     const resolvedImageHover = imageHover === undefined
       ? undefined
-      : await uploadImageIfNeeded(imageHover || resolvedImage || image, "products/hover");
+      : imageHover && imageHover !== image
+        ? await uploadImageIfNeeded(imageHover, "products/hover")
+        : resolvedImage ?? imageHover ?? image;
     const db = getDb();
     await db
       .update(products)

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { MerchProduct } from "@/data/merch";
+import { hasAnyLowStock } from "@/lib/stock";
 
 interface MerchCardProps {
   product: MerchProduct;
@@ -21,6 +22,7 @@ export default function MerchCard({ product, onQuickAdd }: MerchCardProps) {
   const goToDetail = () => navigate(`/shop/${product.id}`);
   const fallbackImage = `https://picsum.photos/seed/${product.id}-fallback/800/800`;
   const currentImage = imageFailed ? fallbackImage : hovered ? product.imageHover : product.image;
+  const lowStock = hasAnyLowStock(product);
 
   return (
     <div
@@ -42,6 +44,12 @@ export default function MerchCard({ product, onQuickAdd }: MerchCardProps) {
         {product.badge && (
           <span className={`absolute top-3 left-3 font-bebas text-sm px-3 py-0.5 tracking-widest ${BADGE_STYLES[product.badge]}`}>
             {product.badge}
+          </span>
+        )}
+
+        {lowStock && (
+          <span className="absolute top-3 right-3 bg-black/80 border border-[var(--brand-yellow)]/50 px-3 py-0.5 font-bebas text-sm tracking-widest text-[var(--brand-yellow)]">
+            LOW STOCK
           </span>
         )}
 

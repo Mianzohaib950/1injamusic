@@ -47,7 +47,9 @@ export async function POST(request: Request) {
     }
 
     const resolvedImage = await uploadImageIfNeeded(image, "products/main");
-    const resolvedImageHover = await uploadImageIfNeeded(imageHover || resolvedImage, "products/hover");
+    const resolvedImageHover = imageHover && imageHover !== image
+      ? await uploadImageIfNeeded(imageHover, "products/hover")
+      : resolvedImage;
 
     const resolvedId = String(id || slugify(name) || `product-${Date.now()}`);
 

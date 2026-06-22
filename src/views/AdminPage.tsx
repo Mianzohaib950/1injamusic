@@ -10,16 +10,19 @@ import {
   Package,
   Save,
   ShoppingCart,
+  Tags,
   Trash2,
   Users,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
+import { clearProductsCatalogCache } from "@/lib/productCatalogClient";
 
 type AdminSection =
   | "dashboard"
   | "cms"
   | "products"
+  | "categories"
   | "artists"
   | "orders"
   | "users"
@@ -30,6 +33,7 @@ const sections: { id: AdminSection; label: string; icon: React.ElementType }[] =
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "cms", label: "CMS", icon: Layers },
   { id: "products", label: "Products", icon: Package },
+  { id: "categories", label: "Categories", icon: Tags },
   { id: "artists", label: "Artists", icon: Mic2 },
   { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "users", label: "Users", icon: Users },
@@ -506,6 +510,7 @@ function ProductsPanel() {
     inStock: true,
   };
   const { data, loading, error, reload } = useAdminData<any[]>("/admin/products", []);
+  const { data: categoryRows, loading: categoriesLoading, error: categoriesError } = useAdminData<any[]>("/admin/categories", []);
   const { data: artists, loading: artistsLoading, error: artistsError } = useAdminData<any[]>("/admin/artists", []);
   const [form, setForm] = useState<any>(blank);
   const [editingId, setEditingId] = useState("");
@@ -525,14 +530,19 @@ function ProductsPanel() {
     return options;
   }, [artists, form.artist, form.artistSlug]);
   const categoryOptions = useMemo(() => {
-    const options = new Set(productCategoryOptions);
+    const options = new Set(
+      categoryRows
+        .map((row) => String(row.slug ?? "").trim())
+        .filter(Boolean),
+    );
+    productCategoryOptions.forEach((category) => options.add(category));
     data.forEach((product) => {
       const category = String(product.category ?? "").trim();
       if (category) options.add(category);
     });
     if (form.category) options.add(String(form.category));
     return Array.from(options);
-  }, [data, form.category]);
+  }, [categoryRows, data, form.category]);
   const selectedProductSizes = useMemo(
     () => String(form.sizes ?? "").split(",").map((size) => size.trim()).filter(Boolean),
     [form.sizes],
@@ -563,6 +573,7 @@ function ProductsPanel() {
     };
     if (editingId) await apiPut(`/admin/products/${editingId}`, payload);
     else await apiPost("/admin/products", payload);
+    clearProductsCatalogCache();
     setForm(blank);
     setImageFileName("");
     setEditingId("");
@@ -617,7 +628,7 @@ function ProductsPanel() {
   };
 
   return (
-    <CrudLayout title="PRODUCTS" loading={loading || artistsLoading} error={error || artistsError}>
+    <CrudLayout title="PRODUCTS" loading={loading || artistsLoading || categoriesLoading} error={error || artistsError || categoriesError}>
       <div className="mb-6 flex items-center justify-end gap-3">
         {!showForm ? (
           <button className={actionClass} onClick={startAddProduct}>
@@ -684,7 +695,126 @@ function ProductsPanel() {
         actions={(row) => (
           <>
             <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, imageHover: row.image ?? row.imageHover ?? "", sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setAutoProductSlug(false); setAutoProductBadge(false); setShowForm(true); scrollToForm(productFormRef); }}>EDIT</button>
-            <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/products/${row.id}`); await reload(); }}><Trash2 size={14} /></button>
+            <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/products/${row.id}`); clearProductsCatalogCache(); await reload(); }}><Trash2 size={14} /></button>
+          </>
+        )}
+      />
+    </CrudLayout>
+  );
+}
+
+function CategoriesPanel() {
+  const blank = { slug: "", name: "", active: true, sortOrder: 0 };
+  const { data, loading, error, reload } = useAdminData<any[]>("/admin/categories", []);
+  const [form, setForm] = useState<any>(blank);
+  const [editingSlug, setEditingSlug] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const categoryFormRef = useRef<HTMLDivElement>(null);
+
+  const save = async () => {
+    const payload = {
+      ...form,
+      slug: toUrlSlug(form.slug || form.name),
+      sortOrder: Number(form.sortOrder ?? 0),
+    };
+    if (editingSlug) await apiPut(`/admin/categories/${editingSlug}`, payload);
+    else await apiPost("/admin/categories", payload);
+    clearProductsCatalogCache();
+    setForm(blank);
+    setEditingSlug("");
+    setShowForm(false);
+    await reload();
+  };
+
+  const startAddCategory = () => {
+    setForm(blank);
+    setEditingSlug("");
+    setShowForm(true);
+  };
+
+  const cancelCategoryForm = () => {
+    setForm(blank);
+    setEditingSlug("");
+    setShowForm(false);
+  };
+
+  return (
+    <CrudLayout title="CATEGORIES" loading={loading} error={error}>
+      <div className="mb-6 flex items-center justify-end gap-3">
+        {!showForm ? (
+          <button className={actionClass} onClick={startAddCategory}>
+            <Save size={16} /> ADD CATEGORY
+          </button>
+        ) : (
+          <button className={ghostClass} onClick={cancelCategoryForm}>
+            CANCEL
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <div ref={categoryFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
+          <LabeledInput
+            label="Category Slug"
+            caption="URL-safe category key. Auto-fills from name; use lowercase letters, numbers, and hyphens."
+            value={form.slug ?? ""}
+            disabled={!!editingSlug}
+            onChange={(e) => setForm({ ...form, slug: e.target.value })}
+          />
+          <LabeledInput
+            label="Category Name"
+            caption="Display label shown in admin and shop filter."
+            value={form.name ?? ""}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <DropdownField
+            label="Sort Order"
+            caption="Lower value appears first in shop category list."
+            value={String(form.sortOrder ?? 0)}
+            onChange={(value) => setForm({ ...form, sortOrder: Number(value) })}
+          >
+            {Array.from({ length: 51 }, (_, index) => (
+              <option key={index} value={String(index)}>{index}</option>
+            ))}
+          </DropdownField>
+          <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
+            <input type="checkbox" checked={Boolean(form.active)} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+            Active
+          </label>
+          <button className={actionClass} onClick={save}><Save size={16} /> {editingSlug ? "UPDATE" : "ADD"} CATEGORY</button>
+        </div>
+      )}
+
+      <AdminTable
+        rows={data}
+        columns={["slug", "name", "sortOrder", "active"]}
+        formatCell={(_, column, value) => {
+          if (column === "active") return value ? "Active" : "Inactive";
+          return undefined;
+        }}
+        actions={(row) => (
+          <>
+            <button
+              className={ghostClass}
+              onClick={() => {
+                setEditingSlug(row.slug);
+                setForm({ ...row });
+                setShowForm(true);
+                scrollToForm(categoryFormRef);
+              }}
+            >
+              EDIT
+            </button>
+            <button
+              className={ghostClass}
+              onClick={async () => {
+                await apiDelete(`/admin/categories/${row.slug}`);
+                clearProductsCatalogCache();
+                await reload();
+              }}
+            >
+              <Trash2 size={14} />
+            </button>
           </>
         )}
       />
@@ -1875,6 +2005,7 @@ export default function AdminPage() {
     const prefetchPaths = [
       "/admin/dashboard",
       "/admin/products",
+      "/admin/categories",
       "/admin/artists",
       "/admin/orders",
       "/admin/users",
@@ -1909,6 +2040,7 @@ export default function AdminPage() {
     dashboard: <Dashboard />,
     cms: <CmsPanel />,
     products: <ProductsPanel />,
+    categories: <CategoriesPanel />,
     artists: <ArtistsPanel />,
     orders: <OrdersPanel orderId={orderId} />,
     users: <UsersPanel />,

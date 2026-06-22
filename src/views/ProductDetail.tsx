@@ -10,6 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
 import { getCachedProducts, loadProductsCatalog } from "@/lib/productCatalogClient";
+import { getLowStockLabel } from "@/lib/stock";
 import { toast } from "sonner";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -63,7 +64,7 @@ export default function ProductDetail() {
     let active = true;
     const loadProducts = async () => {
       try {
-        const rows = await loadProductsCatalog();
+        const rows = await loadProductsCatalog({ force: Boolean(getCachedProducts()) });
         if (!active) return;
         setProducts(rows);
         setProductsLoading(false);
@@ -185,6 +186,8 @@ export default function ProductDetail() {
       toast.error("Unable to share right now");
     }
   };
+
+  const lowStockLabel = selectedSize ? getLowStockLabel(product, selectedSize) : "";
 
   return (
     <main className="w-full min-h-screen bg-[var(--brand-black)]">
@@ -317,6 +320,11 @@ export default function ProductDetail() {
                   </button>
                 ))}
               </div>
+              {lowStockLabel && (
+                <p className="mt-3 inline-flex border border-[var(--brand-yellow)]/40 bg-[var(--brand-yellow)]/10 px-3 py-1.5 font-sans text-xs text-[var(--brand-yellow)]">
+                  {lowStockLabel}
+                </p>
+              )}
             </div>
 
             {/* Quantity + Add to Cart */}
