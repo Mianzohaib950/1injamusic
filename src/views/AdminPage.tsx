@@ -57,6 +57,16 @@ const ADMIN_CACHE_TTL_MS = 60_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
+const MEMORY_ONLY_CACHE_PREFIXES = [
+  "/admin/products",
+  "/admin/artists",
+  "/admin/orders",
+  "/admin/users",
+  "/admin/bookings",
+  "/admin/event-contacts",
+  "/admin/cms/sections",
+  "/admin/cms/items",
+];
 const dashboardFallback = {
   totals: {
     users: 0,
@@ -134,6 +144,7 @@ function formatDateTime(value: string) {
 }
 
 function getStoredAdminCache(path: string) {
+  if (MEMORY_ONLY_CACHE_PREFIXES.some((prefix) => path.startsWith(prefix))) return null;
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(`${ADMIN_CACHE_STORAGE_PREFIX}${path}`);
@@ -166,6 +177,7 @@ function getFreshAdminCache<T>(path: string) {
 function setAdminCache(path: string, data: unknown) {
   const payload = { data, timestamp: Date.now() };
   adminDataCache.set(path, payload);
+  if (MEMORY_ONLY_CACHE_PREFIXES.some((prefix) => path.startsWith(prefix))) return;
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(`${ADMIN_CACHE_STORAGE_PREFIX}${path}`, JSON.stringify(payload));
@@ -2018,23 +2030,34 @@ export default function AdminPage() {
     if (!isLoggedIn || user?.role !== "admin") return;
     const prefetchPaths = [
       "/admin/dashboard",
-      "/admin/products",
       "/admin/categories",
+      "/admin/cms/pages",
+      "/admin/cms/sections?pageKey=home",
+      "/admin/products",
       "/admin/artists",
       "/admin/orders",
       "/admin/users",
       "/admin/bookings",
       "/admin/event-contacts",
-      "/admin/cms/pages",
-      "/admin/cms/sections?pageKey=home",
     ];
 
-    prefetchPaths.forEach((path) => {
-      if (getFreshAdminCache(path)) return;
-      fetchAdminData(path).catch(() => {
-        // Best-effort prefetch only.
-      });
-    });
+    let cancelled = false;
+    const prefetch = async () => {
+      for (const path of prefetchPaths) {
+        if (cancelled) return;
+        if (getFreshAdminCache(path)) continue;
+        try {
+          await fetchAdminData(path);
+        } catch {
+          // Best-effort prefetch only.
+        }
+      }
+    };
+
+    window.setTimeout(prefetch, 50);
+    return () => {
+      cancelled = true;
+    };
   }, [isLoggedIn, user?.role]);
 
   if (!user && isAuthLoading) {
