@@ -15,6 +15,16 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function normalizeStockBySize(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([size, quantity]) => [
+      String(size),
+      Math.max(0, Math.floor(Number(quantity) || 0)),
+    ]),
+  );
+}
+
 export async function GET(request: Request) {
   try {
     const auth = requireAuth(request);
@@ -41,7 +51,7 @@ export async function POST(request: Request) {
     await ensureServerSchema();
 
     const body = await readJson(request);
-    const { id, name, artist, artistSlug, category, price, originalPrice, image, imageHover, description, badge, inStock, sizes } = body;
+    const { id, name, artist, artistSlug, category, price, originalPrice, image, imageHover, description, badge, inStock, sizes, stockBySize } = body;
     if (!name || !artist || !artistSlug || !category || price == null || !image || !description) {
       return apiError("Missing required product fields", 400);
     }
@@ -67,6 +77,7 @@ export async function POST(request: Request) {
       badge: badge ?? null,
       inStock: inStock == null ? true : Boolean(inStock),
       sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : ["One Size"],
+      stockBySize: normalizeStockBySize(stockBySize),
     };
     await getDb().insert(products).values(item);
     return json(item, { status: 201 });

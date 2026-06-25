@@ -25,12 +25,13 @@ export default function QuickAddModal({ product, onClose }: QuickAddModalProps) 
       setError(true);
       return;
     }
-    const addedToCart = addToCart(product, selectedSize, quantity);
-    if (!addedToCart) {
+    const addResult = addToCart(product, selectedSize, quantity);
+    if (!addResult.ok && addResult.reason === "auth") {
       onClose();
       navigate("/auth", { state: { from: "/shop", tab: "login" } });
       return;
     }
+    if (!addResult.ok) return;
     onClose();
     setSelectedSize("");
     setQuantity(1);

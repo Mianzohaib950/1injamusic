@@ -58,9 +58,13 @@ export default function ShopPage() {
   const rangeMax = Math.max(productMaxPrice, 1);
   const selectedMinPrice = Math.min(priceRange[0], rangeMax);
   const selectedMaxPrice = Math.min(priceRange[1] || rangeMax, rangeMax);
-  const priceMinPercent = (selectedMinPrice / rangeMax) * 100;
-  const priceMaxPercent = (selectedMaxPrice / rangeMax) * 100;
   const priceRangeActive = priceRangeTouched && (selectedMinPrice > 0 || selectedMaxPrice < productMaxPrice);
+  const hasActiveFilters =
+    activeArtist !== "All Artists" ||
+    selectedCategories.length > 0 ||
+    selectedSizes.length > 0 ||
+    inStockOnly ||
+    priceRangeActive;
   const categoryFilterLabel = selectedCategories.length === 0 ? "All Categories" : `${selectedCategories.length} Selected`;
   const sizeFilterLabel = selectedSizes.length === 0 ? "All Sizes" : `${selectedSizes.length} Selected`;
   const artistFilterLabel = activeArtist === "All Artists" ? "All Artists" : activeArtist;
@@ -260,6 +264,14 @@ export default function ShopPage() {
     setPriceRange([0, productMaxPrice]);
   };
 
+  const resetAllFilters = () => {
+    setActiveArtist("All Artists");
+    setSelectedCategories([]);
+    setSelectedSizes([]);
+    setInStockOnly(false);
+    resetPriceRange();
+  };
+
   const toggleCategory = (category: string) => {
     setSelectedCategories((current) =>
       current.includes(category)
@@ -411,57 +423,59 @@ export default function ShopPage() {
             />
             IN STOCK ONLY
           </label>
-        </div>
 
-        <div className="max-w-7xl mx-auto mt-3 flex flex-col gap-3 border-t border-[#222] pt-3 sm:flex-row sm:items-center">
-          <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-start">
-            <span className="font-bebas text-sm tracking-widest text-[var(--brand-gray)]">PRICE RANGE</span>
-            <span className="min-w-[88px] font-bebas text-base tracking-widest text-[var(--brand-yellow)]">
-              ${selectedMinPrice} - ${selectedMaxPrice}
-            </span>
-          </div>
-          <div className="relative h-7 w-full sm:w-[340px] lg:w-[420px]">
-            <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 bg-[#333]" />
-            <div
-              className="absolute top-1/2 h-0.5 -translate-y-1/2 bg-[var(--brand-yellow)]"
-              style={{
-                left: `${priceMinPercent}%`,
-                right: `${100 - priceMaxPercent}%`,
-              }}
-            />
-            <input
-              type="range"
-              min={0}
-              max={rangeMax}
-              step={1}
-              value={selectedMinPrice}
-              onChange={(event) => updateMinPrice(Number(event.target.value))}
-              className="pointer-events-none absolute inset-x-0 top-1/2 h-0.5 w-full -translate-y-1/2 appearance-none bg-transparent accent-[var(--brand-yellow)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-black [&::-webkit-slider-thumb]:bg-[var(--brand-yellow)] [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-black [&::-moz-range-thumb]:bg-[var(--brand-yellow)]"
-              aria-label="Minimum price"
-            />
-            <input
-              type="range"
-              min={0}
-              max={rangeMax}
-              step={1}
-              value={selectedMaxPrice}
-              onChange={(event) => updateMaxPrice(Number(event.target.value))}
-              className="pointer-events-none absolute inset-x-0 top-1/2 h-0.5 w-full -translate-y-1/2 appearance-none bg-transparent accent-[var(--brand-yellow)] [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-black [&::-webkit-slider-thumb]:bg-[var(--brand-yellow)] [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-black [&::-moz-range-thumb]:bg-[var(--brand-yellow)]"
-              aria-label="Maximum price"
-            />
-          </div>
-          <button
-            onClick={resetPriceRange}
-            disabled={!priceRangeActive}
-            className="w-fit font-bebas text-sm tracking-widest text-[var(--brand-gray)] hover:text-[var(--brand-yellow)] disabled:opacity-40 disabled:hover:text-[var(--brand-gray)]"
-          >
-            RESET
-          </button>
+          <details className="group relative">
+            <summary className="list-none inline-flex min-w-[190px] cursor-pointer items-center justify-between gap-2 border border-[#333] px-3 py-2 font-bebas text-sm tracking-widest text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]">
+              <span>PRICE: ${selectedMinPrice} - ${selectedMaxPrice}</span>
+              <ChevronDown className="h-4 w-4 text-[var(--brand-yellow)] transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="absolute left-0 top-full z-40 mt-2 w-[260px] border border-[#333] bg-[#111] p-3 shadow-2xl">
+              <p className="mb-3 font-bebas text-sm tracking-widest text-[var(--brand-gray)]">PRICE RANGE</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={rangeMax}
+                  value={selectedMinPrice}
+                  onChange={(event) => updateMinPrice(Number(event.target.value))}
+                  className="w-full border border-[#333] bg-[#0A0A0A] px-3 py-2 font-sans text-sm text-white outline-none focus:border-[var(--brand-yellow)]"
+                  aria-label="Minimum price"
+                />
+                <span className="text-[var(--brand-gray)]">-</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={rangeMax}
+                  value={selectedMaxPrice}
+                  onChange={(event) => updateMaxPrice(Number(event.target.value))}
+                  className="w-full border border-[#333] bg-[#0A0A0A] px-3 py-2 font-sans text-sm text-white outline-none focus:border-[var(--brand-yellow)]"
+                  aria-label="Maximum price"
+                />
+              </div>
+              <button
+                onClick={resetPriceRange}
+                disabled={!priceRangeActive}
+                className="mt-3 w-full border border-[#333] px-3 py-2 font-bebas text-sm tracking-widest text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] disabled:opacity-40 disabled:hover:border-[#333] disabled:hover:text-[var(--brand-gray)]"
+              >
+                RESET PRICE
+              </button>
+            </div>
+          </details>
+
+          {hasActiveFilters && (
+            <button
+              onClick={resetAllFilters}
+              className="inline-flex items-center gap-1 border border-[#333] px-3 py-2 font-bebas text-sm tracking-widest text-[var(--brand-gray)] transition-colors hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
+            >
+              <X size={13} />
+              RESET FILTERS
+            </button>
+          )}
         </div>
 
         {/* Active filter tags */}
-        {(activeArtist !== "All Artists" || selectedCategories.length > 0 || selectedSizes.length > 0 || inStockOnly || priceRangeActive) && (
-          <div className="max-w-7xl mx-auto mt-3 flex items-center gap-2">
+        {hasActiveFilters && (
+          <div className="max-w-7xl mx-auto mt-3 flex flex-wrap items-center gap-2">
             <span className="text-[var(--brand-gray)] font-sans text-xs">Filtered:</span>
             {activeArtist !== "All Artists" && (
               <span className="flex items-center gap-1 bg-[#1a1a1a] border border-[#333] text-white font-sans text-xs px-3 py-1">
@@ -493,6 +507,12 @@ export default function ShopPage() {
                 <button onClick={resetPriceRange} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
               </span>
             )}
+            <button
+              onClick={resetAllFilters}
+              className="flex items-center gap-1 border border-[#333] px-3 py-1 font-sans text-xs text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
+            >
+              Clear all
+            </button>
           </div>
         )}
       </section>

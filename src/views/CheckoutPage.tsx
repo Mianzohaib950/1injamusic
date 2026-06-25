@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { apiPost } from "@/lib/api";
+import { clearProductsCatalogCache } from "@/lib/productCatalogClient";
 
 type Step = 1 | 2 | 3;
 
@@ -293,6 +294,7 @@ export default function CheckoutPage() {
     shipping.address && shipping.city && shipping.zip && shipping.country;
 
   const completeOrder = async (createdOrderId: string) => {
+    clearProductsCatalogCache();
     await refreshOrders();
     clearCart();
     navigate("/order-confirmation", { state: { orderId: createdOrderId } });

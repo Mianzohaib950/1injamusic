@@ -13,6 +13,12 @@ export async function ensureServerSchema() {
         `alter table if exists products add column if not exists sizes jsonb not null default '["One Size"]'::jsonb;`,
       );
       await pool.query(
+        `alter table if exists products add column if not exists stock_by_size jsonb not null default '{}'::jsonb;`,
+      );
+      await pool.query(
+        `alter table if exists orders add column if not exists stock_adjusted boolean not null default false;`,
+      );
+      await pool.query(
         `create table if not exists artists (
           slug text primary key,
           name text not null,

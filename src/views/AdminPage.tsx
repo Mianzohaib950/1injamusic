@@ -17,6 +17,8 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { clearProductsCatalogCache } from "@/lib/productCatalogClient";
+import { merchProducts } from "@/data/merch";
+import { artistProfiles } from "@/data/artists";
 
 type AdminSection =
   | "dashboard"
@@ -54,18 +56,15 @@ const productCategoryOptions = ["tee", "hoodie", "cap", "vinyl", "poster", "bund
 const productSizeOptions = ["S", "M", "L", "XL", "XXL"];
 const artistSortOrderOptions = Array.from({ length: 21 }, (_, index) => index);
 const ADMIN_CACHE_TTL_MS = 60_000;
+const ADMIN_REQUEST_TIMEOUT_MS = 8_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
 const MEMORY_ONLY_CACHE_PREFIXES = [
-  "/admin/products",
-  "/admin/artists",
   "/admin/orders",
   "/admin/users",
   "/admin/bookings",
   "/admin/event-contacts",
-  "/admin/cms/sections",
-  "/admin/cms/items",
 ];
 const dashboardFallback = {
   totals: {
@@ -190,12 +189,15 @@ async function fetchAdminData<T>(path: string) {
   const existing = adminDataInflight.get(path);
   if (existing) return existing as Promise<T>;
 
-  const request = apiGet<T>(path)
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), ADMIN_REQUEST_TIMEOUT_MS);
+  const request = apiGet<T>(path, { signal: controller.signal })
     .then((result) => {
       setAdminCache(path, result);
       return result;
     })
     .finally(() => {
+      window.clearTimeout(timeoutId);
       adminDataInflight.delete(path);
     });
 
@@ -265,6 +267,7 @@ function useAdminData<T>(path: string, fallback: T) {
       load({ background: true });
       return;
     }
+    setData(fallback);
     load({ background: true });
   }, [path]);
 
@@ -535,9 +538,14 @@ function ProductsPanel() {
     sizes: "S,M,L,XL",
     inStock: true,
   };
-  const { data, loading, error, reload } = useAdminData<any[]>("/admin/products", []);
-  const { data: categoryRows, loading: categoriesLoading, error: categoriesError } = useAdminData<any[]>("/admin/categories", []);
-  const { data: artists, loading: artistsLoading, error: artistsError } = useAdminData<any[]>("/admin/artists", []);
+  const { data, loading, error, reload } = useAdminData<any[]>("/admin/products", merchProducts);
+  const { data: categoryRows, loading: categoriesLoading, error: categoriesError } = useAdminData<any[]>("/admin/categories", productCategoryOptions.map((slug, index) => ({
+    slug,
+    name: capitalizeFirst(slug),
+    active: true,
+    sortOrder: index + 1,
+  })));
+  const { data: artists, loading: artistsLoading, error: artistsError } = useAdminData<any[]>("/admin/artists", artistProfiles);
   const [form, setForm] = useState<any>(blank);
   const [editingId, setEditingId] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -731,10 +739,16 @@ function ProductsPanel() {
 
 function CategoriesPanel() {
   const blank = { slug: "", name: "", active: true, sortOrder: 0 };
-  const { data, loading, error, reload } = useAdminData<any[]>("/admin/categories", []);
+  const { data, loading, error, reload } = useAdminData<any[]>("/admin/categories", productCategoryOptions.map((slug, index) => ({
+    slug,
+    name: capitalizeFirst(slug),
+    active: true,
+    sortOrder: index + 1,
+  })));
   const [form, setForm] = useState<any>(blank);
   const [editingSlug, setEditingSlug] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [autoCategorySlug, setAutoCategorySlug] = useState(true);
   const categoryFormRef = useRef<HTMLDivElement>(null);
 
   const save = async () => {
@@ -748,6 +762,7 @@ function CategoriesPanel() {
     clearProductsCatalogCache();
     setForm(blank);
     setEditingSlug("");
+    setAutoCategorySlug(true);
     setShowForm(false);
     await reload();
   };
@@ -755,13 +770,23 @@ function CategoriesPanel() {
   const startAddCategory = () => {
     setForm(blank);
     setEditingSlug("");
+    setAutoCategorySlug(true);
     setShowForm(true);
   };
 
   const cancelCategoryForm = () => {
     setForm(blank);
     setEditingSlug("");
+    setAutoCategorySlug(true);
     setShowForm(false);
+  };
+
+  const updateCategoryName = (name: string) => {
+    setForm((current: any) => ({
+      ...current,
+      name,
+      slug: !editingSlug && autoCategorySlug ? toUrlSlug(name) : current.slug,
+    }));
   };
 
   return (
@@ -785,13 +810,16 @@ function CategoriesPanel() {
             caption="URL-safe category key. Auto-fills from name; use lowercase letters, numbers, and hyphens."
             value={form.slug ?? ""}
             disabled={!!editingSlug}
-            onChange={(e) => setForm({ ...form, slug: e.target.value })}
+            onChange={(e) => {
+              setAutoCategorySlug(false);
+              setForm({ ...form, slug: toUrlSlug(e.target.value) });
+            }}
           />
           <LabeledInput
             label="Category Name"
             caption="Display label shown in admin and shop filter."
             value={form.name ?? ""}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e) => updateCategoryName(e.target.value)}
           />
           <DropdownField
             label="Sort Order"
@@ -825,6 +853,7 @@ function CategoriesPanel() {
               onClick={() => {
                 setEditingSlug(row.slug);
                 setForm({ ...row });
+                setAutoCategorySlug(false);
                 setShowForm(true);
                 scrollToForm(categoryFormRef);
               }}
@@ -850,7 +879,7 @@ function CategoriesPanel() {
 
 function ArtistsPanel() {
   const blank = { slug: "", name: "", genres: "", bio: "", image: "", bookingEmail: "booking@1jamaicamusic.com", active: true, sortOrder: 0 };
-  const { data, loading, error, reload } = useAdminData<any[]>("/admin/artists", []);
+  const { data, loading, error, reload } = useAdminData<any[]>("/admin/artists", artistProfiles);
   const [form, setForm] = useState<any>(blank);
   const [editingSlug, setEditingSlug] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -987,15 +1016,53 @@ type CmsSection = {
   items: CmsItem[];
 };
 
+const cmsPageFallback: CmsPage[] = [
+  { id: "home-page", pageKey: "home", title: "Home Page", active: true },
+  { id: "artists-page", pageKey: "artists", title: "Artists Page", active: true },
+  { id: "shop-page", pageKey: "shop", title: "Shop Page", active: true },
+  { id: "events-page", pageKey: "events", title: "Events & Contact Page", active: true },
+  { id: "booking-page", pageKey: "booking", title: "Booking Page", active: true },
+];
+
+function makeCmsSectionFallback(pageKey: string): CmsSection[] {
+  const page = cmsPageFallback.find((item) => item.pageKey === pageKey) ?? cmsPageFallback[0];
+  const titles: Record<string, string> = {
+    home: "WE COLLABORATE",
+    artists: "OUR ARTISTS",
+    shop: "OFFICIAL MERCH SHOP",
+    events: "EVENTS & CONTACT",
+    booking: "BOOK AN ARTIST",
+  };
+  return [
+    {
+      id: `${page.pageKey}-hero`,
+      pageId: page.id,
+      sectionKey: "hero",
+      sectionType: "hero",
+      title: titles[page.pageKey] ?? page.title,
+      subtitle: "",
+      body: "",
+      imageUrl: "",
+      videoUrl: "",
+      ctaLabel: "",
+      ctaUrl: "",
+      settings: {},
+      sortOrder: 1,
+      active: true,
+      items: [],
+    },
+  ];
+}
+
 function CmsPanel() {
   const protectedPageKeys = new Set(["home", "artists", "shop", "events", "booking"]);
   const compactActionClass = "inline-flex items-center justify-center gap-1 border border-[#333] text-[var(--brand-gray)] font-bebas tracking-widest px-2 py-1 h-7  text-xs hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)] transition-colors";
-  const { data: pages, loading: pagesLoading, error: pagesError, reload: reloadPages } = useAdminData<CmsPage[]>("/admin/cms/pages", []);
+  const { data: pages, loading: pagesLoading, error: pagesError, reload: reloadPages } = useAdminData<CmsPage[]>("/admin/cms/pages", cmsPageFallback);
   const [selectedPageKey, setSelectedPageKey] = useState("home");
   const [editingPageId, setEditingPageId] = useState("");
   const [pageEditTitle, setPageEditTitle] = useState("");
   const [pageEditActive, setPageEditActive] = useState(true);
-  const { data, loading, error, reload } = useAdminData<CmsSection[]>(`/admin/cms/sections?pageKey=${encodeURIComponent(selectedPageKey)}`, []);
+  const { data, loading, error, reload } = useAdminData<CmsSection[]>(`/admin/cms/sections?pageKey=${encodeURIComponent(selectedPageKey)}`, makeCmsSectionFallback(selectedPageKey));
   const [editingSectionId, setEditingSectionId] = useState("");
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [newPageKey, setNewPageKey] = useState("");
@@ -2043,15 +2110,13 @@ export default function AdminPage() {
 
     let cancelled = false;
     const prefetch = async () => {
-      for (const path of prefetchPaths) {
-        if (cancelled) return;
-        if (getFreshAdminCache(path)) continue;
-        try {
+      const missingPaths = prefetchPaths.filter((path) => !getFreshAdminCache(path));
+      await Promise.allSettled(
+        missingPaths.map(async (path) => {
+          if (cancelled) return;
           await fetchAdminData(path);
-        } catch {
-          // Best-effort prefetch only.
-        }
-      }
+        }),
+      );
     };
 
     window.setTimeout(prefetch, 50);

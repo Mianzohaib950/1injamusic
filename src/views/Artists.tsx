@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import gsap from "gsap";
+import { Search, X } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { artistProfiles, type ArtistProfile } from "@/data/artists";
 
@@ -19,6 +20,21 @@ export default function Artists() {
   const [heroBody, setHeroBody] = useState("Representing the sound of Jamaica to the world.");
   const [heroImage, setHeroImage] = useState("");
   const [contentTitle, setContentTitle] = useState("OUR ARTISTS");
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredArtists = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return artists;
+
+    return artists.filter((artist) => {
+      const searchable = [
+        artist.name,
+        artist.slug,
+        artist.bio,
+        ...artist.genres,
+      ].join(" ").toLowerCase();
+      return searchable.includes(query);
+    });
+  }, [artists, searchQuery]);
 
   useEffect(() => {
     const chars = heroRef.current?.querySelectorAll("span");
@@ -99,12 +115,31 @@ export default function Artists() {
           </div>
         </div>
 
-        <div className="mb-10">
+        <div className="mb-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{contentTitle}</span>
+          <div className="relative w-full md:w-[360px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand-yellow)]" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search artists"
+              className="w-full border border-[#333] bg-[#0A0A0A] py-3 pl-10 pr-10 font-sans text-sm text-white outline-none transition-colors placeholder:text-[var(--brand-gray)] focus:border-[var(--brand-yellow)]"
+              aria-label="Search artists"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--brand-gray)] transition-colors hover:text-white"
+                aria-label="Clear artist search"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {artists.map((artist) => (
+          {filteredArtists.map((artist) => (
             <Link 
               to={`/artists/${artist.slug}`} 
               key={artist.slug}
@@ -141,6 +176,12 @@ export default function Artists() {
             </Link>
           ))}
         </div>
+
+        {filteredArtists.length === 0 && (
+          <div className="border border-[#222] bg-[#111] px-6 py-12 text-center">
+            <p className="font-bebas text-3xl tracking-widest text-[var(--brand-gray)]">NO ARTISTS FOUND</p>
+          </div>
+        )}
 
       </div>
     </main>

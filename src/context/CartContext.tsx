@@ -1,6 +1,8 @@
 import { createContext, useContext, useReducer, useState, useEffect, ReactNode } from "react";
 import { merchProducts, type MerchProduct } from "@/data/merch";
 import { useAuth } from "@/context/AuthContext";
+import { getStockForSize } from "@/lib/stock";
+import { toast } from "sonner";
 
 export interface CartItem {
   cartKey: string;
@@ -11,6 +13,8 @@ export interface CartItem {
   image: string;
   size: string;
   quantity: number;
+  inStock?: boolean;
+  stockBySize?: Record<string, number>;
 }
 
 interface CartState {
@@ -44,7 +48,7 @@ function normalizeStoredCartItems(items: unknown): CartItem[] {
   if (!Array.isArray(items)) return [];
 
   const normalized = items
-    .map((item) => {
+    .map<CartItem | null>((item) => {
       if (!item || typeof item !== "object") return null;
       const storedItem = item as Partial<CartItem> & { id?: string };
       const product = findProductForStoredItem(storedItem);
@@ -63,6 +67,8 @@ function normalizeStoredCartItems(items: unknown): CartItem[] {
         image: storedItem.image || product?.image || "",
         size,
         quantity,
+        inStock: storedItem.inStock ?? product?.inStock,
+        stockBySize: storedItem.stockBySize ?? product?.stockBySize,
       };
     })
     .filter((item): item is CartItem => Boolean(item));
@@ -112,9 +118,9 @@ function cartReducer(state: CartState, action: CartAction): CartState {
 
 interface CartContextType {
   cartItems: CartItem[];
-  addToCart: (product: MerchProduct, size: string, quantity?: number) => boolean;
+  addToCart: (product: MerchProduct, size: string, quantity?: number) => CartAddResult;
   removeFromCart: (cartKey: string) => void;
-  updateQuantity: (cartKey: string, quantity: number) => void;
+  updateQuantity: (cartKey: string, quantity: number) => boolean;
   clearCart: () => void;
   totalItems: number;
   totalPrice: number;
@@ -122,7 +128,38 @@ interface CartContextType {
   setCartOpen: (open: boolean) => void;
 }
 
+type CartAddResult =
+  | { ok: true }
+  | { ok: false; reason: "auth" | "stock"; message?: string };
+
 const CartContext = createContext<CartContextType | null>(null);
+
+function getCartItemStock(item: CartItem) {
+  const product = merchProducts.find((candidate) => candidate.id === item.productId);
+  const stockProduct: MerchProduct = {
+    id: item.productId,
+    name: item.name,
+    artist: item.artist,
+    artistSlug: product?.artistSlug ?? "",
+    category: product?.category ?? "tee",
+    price: item.price,
+    originalPrice: product?.originalPrice ?? null,
+    sizes: product?.sizes ?? [item.size],
+    image: item.image,
+    imageHover: product?.imageHover ?? item.image,
+    description: product?.description ?? "",
+    badge: product?.badge ?? null,
+    inStock: item.inStock ?? product?.inStock ?? true,
+    stockBySize: item.stockBySize ?? product?.stockBySize,
+  };
+  return getStockForSize(stockProduct, item.size);
+}
+
+function makeStockError(stock: number, size: string) {
+  return stock <= 0
+    ? `This product is out of stock in ${size}.`
+    : `Only ${stock} left in this size.`;
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { isLoggedIn } = useAuth();
@@ -159,16 +196,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("1nja_cart", JSON.stringify(state.items));
   }, [state.items]);
 
-  const addToCart = (product: MerchProduct, size: string, quantity = 1) => {
+  const addToCart = (product: MerchProduct, size: string, quantity = 1): CartAddResult => {
     const hasToken = typeof window !== "undefined" ? localStorage.getItem("1jm_token") : null;
     if (!isLoggedIn && !hasToken) {
       dispatch({ type: "CLEAR" });
       setCartOpen(false);
       localStorage.removeItem("1nja_cart");
-      return false;
+      return { ok: false, reason: "auth" };
     }
 
     const cartKey = `${product.id}::${size}`;
+    const requestedQuantity = Math.max(1, Number(quantity) || 1);
+    const existingQuantity = state.items.find((item) => item.cartKey === cartKey)?.quantity ?? 0;
+    const availableStock = getStockForSize(product, size);
+
+    if (availableStock != null && existingQuantity + requestedQuantity > availableStock) {
+      const message = makeStockError(availableStock, size);
+      toast.error(message);
+      return { ok: false, reason: "stock", message };
+    }
+
     dispatch({
       type: "ADD",
       item: {
@@ -179,21 +226,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
         price: product.price,
         image: product.image,
         size,
-        quantity,
+        quantity: requestedQuantity,
+        inStock: product.inStock,
+        stockBySize: product.stockBySize,
       },
     });
     setCartOpen(true);
-    return true;
+    return { ok: true };
   };
 
   const removeFromCart = (cartKey: string) => dispatch({ type: "REMOVE", cartKey });
 
-  const updateQuantity = (cartKey: string, quantity: number) => {
+  const updateQuantity = (cartKey: string, quantity: number): boolean => {
     if (quantity < 1) {
       dispatch({ type: "REMOVE", cartKey });
-    } else {
-      dispatch({ type: "UPDATE_QTY", cartKey, quantity });
+      return true;
     }
+
+    const item = state.items.find((candidate) => candidate.cartKey === cartKey);
+    const availableStock = item ? getCartItemStock(item) : null;
+
+    if (availableStock != null && quantity > availableStock) {
+      toast.error(makeStockError(availableStock, item?.size ?? "this size"));
+      return false;
+    }
+
+    dispatch({ type: "UPDATE_QTY", cartKey, quantity });
+    return true;
   };
 
   const clearCart = () => dispatch({ type: "CLEAR" });

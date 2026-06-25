@@ -5,6 +5,7 @@ import { ShoppingBag, ChevronRight, Minus, Plus, Share2, Heart } from "lucide-re
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { MerchProduct } from "@/data/merch";
+import { merchProducts } from "@/data/merch";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import MerchCard from "@/components/MerchCard";
@@ -35,8 +36,8 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { isLoggedIn, isWishlisted, toggleWishlist } = useAuth();
-  const [products, setProducts] = useState<MerchProduct[]>(() => getCachedProducts() ?? []);
-  const [productsLoading, setProductsLoading] = useState(() => !getCachedProducts());
+  const [products, setProducts] = useState<MerchProduct[]>(() => getCachedProducts() ?? merchProducts);
+  const [productsLoading, setProductsLoading] = useState(false);
   const product = products.find((item) => item.id === (productId ?? ""));
   const [activeImg, setActiveImg] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
@@ -66,10 +67,12 @@ export default function ProductDetail() {
       try {
         const rows = await loadProductsCatalog({ force: Boolean(getCachedProducts()) });
         if (!active) return;
-        setProducts(rows);
+        setProducts(rows.length > 0 ? rows : merchProducts);
         setProductsLoading(false);
       } catch {
-        if (active) setProductsLoading(false);
+        if (!active) return;
+        setProducts((current) => (current.length > 0 ? current : merchProducts));
+        setProductsLoading(false);
       }
     };
 
@@ -146,11 +149,12 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (!selectedSize) { setSizeError(true); return; }
-    const addedToCart = addToCart(product, selectedSize, quantity);
-    if (!addedToCart) {
+    const addResult = addToCart(product, selectedSize, quantity);
+    if (!addResult.ok && addResult.reason === "auth") {
       navigate("/auth", { state: { from: `/shop/${product.id}`, tab: "login" } });
       return;
     }
+    if (!addResult.ok) return;
     setAdded(true);
     setTimeout(() => setAdded(false), 2200);
   };

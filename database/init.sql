@@ -36,12 +36,15 @@ create table if not exists products (
   description text not null,
   badge text,
   sizes jsonb not null default '["One Size"]'::jsonb,
+  stock_by_size jsonb not null default '{}'::jsonb,
   in_stock boolean not null default true,
   created_at timestamp not null default now()
 );
 
 alter table products add column if not exists sizes jsonb not null default '["One Size"]'::jsonb;
-
+alter table products add column if not exists stock_by_size jsonb not null default '{}'::jsonb;
+alter table if exists orders add column if not exists stock_adjusted boolean not null default false;
+                        
 create table if not exists artists (
   slug text primary key,
   name text not null,
@@ -108,6 +111,7 @@ create table if not exists orders (
   state text not null,
   zip text not null,
   country text not null,
+  stock_adjusted boolean not null default false,
   created_at timestamp not null default now()
 );
 

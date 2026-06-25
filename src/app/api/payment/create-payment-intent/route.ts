@@ -11,6 +11,32 @@ export const runtime = "nodejs";
 type Db = ReturnType<typeof getDb>;
 type Product = typeof products.$inferSelect;
 
+function normalizeStockBySize(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {} as Record<string, number>;
+  return Object.fromEntries(
+    Object.entries(value).map(([size, quantity]) => [
+      String(size),
+      Math.max(0, Math.floor(Number(quantity) || 0)),
+    ]),
+  ) as Record<string, number>;
+}
+
+function getFallbackLowStock(product: Product, size: string) {
+  if (!product.inStock || size.toLowerCase() === "one size") return null;
+
+  const badge = product.badge?.toUpperCase();
+  if (badge === "SALE" && ["L", "XL", "XXL"].includes(size)) return size === "XXL" ? 1 : 2;
+  if (badge === "LIMITED" && ["M", "L", "XL", "XXL"].includes(size)) return size === "XXL" ? 2 : 3;
+  if (/limited|exclusive|drop|edition/i.test(product.name) && ["XL", "XXL"].includes(size)) return 3;
+
+  return null;
+}
+
+function getAvailableStock(product: Product, size: string) {
+  const stockBySize = normalizeStockBySize(product.stockBySize);
+  return stockBySize[size] ?? getFallbackLowStock(product, size);
+}
+
 function resolveCartProductId(item: any) {
   const candidates = [
     item?.productId,
@@ -64,12 +90,22 @@ export async function POST(request: Request) {
       const product = dbProducts.find((p: typeof products.$inferSelect) => p.id === item.productId);
       if (!product) throw new Error("Invalid cart item");
       const quantity = Number(item.quantity) || 1;
+      const size = item.size || "One Size";
+      const availableStock = getAvailableStock(product, size);
+
+      if (!product.inStock) {
+        throw new Error(`"${product.name}" is currently out of stock.`);
+      }
+      if (availableStock != null && quantity > availableStock) {
+        throw new Error(`Only ${availableStock} left for ${product.name} (${size}).`);
+      }
+
       return {
         productId: product.id,
         name: product.name,
         artist: product.artist,
         image: product.image,
-        size: item.size || "One Size",
+        size,
         quantity,
         priceCents: product.price * 100,
         amountCents: product.price * 100 * quantity,
@@ -132,6 +168,10 @@ export async function POST(request: Request) {
 
     return json({ clientSecret: paymentIntent?.client_secret ?? null, orderId, demo: isDemoPayment });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/out of stock|only \d+ left/i.test(message)) {
+      return apiError(message, 400);
+    }
     return serverError(error);
   }
 }

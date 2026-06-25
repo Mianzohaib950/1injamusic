@@ -13,6 +13,7 @@ export const products = pgTable("products", {
   description: text("description").notNull(),
   badge: text("badge"),
   sizes: jsonb("sizes").$type<string[]>().notNull().default(["One Size"]),
+  stockBySize: jsonb("stock_by_size").$type<Record<string, number>>().notNull().default({}),
   inStock: boolean("in_stock").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

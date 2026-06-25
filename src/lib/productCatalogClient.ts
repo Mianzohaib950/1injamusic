@@ -8,6 +8,7 @@ type ProductResponse = Omit<MerchProduct, "category" | "badge"> & {
 
 const PRODUCT_CACHE_KEY = "product-catalog-cache";
 const PRODUCT_CACHE_TTL_MS = 5 * 60 * 1000;
+const PRODUCT_REQUEST_TIMEOUT_MS = 8_000;
 let cachedProducts: MerchProduct[] | null = null;
 let inFlight: Promise<MerchProduct[]> | null = null;
 
@@ -76,7 +77,10 @@ export async function loadProductsCatalog(options: { force?: boolean } = {}) {
   if (inFlight) return inFlight;
 
   inFlight = (async () => {
-    const rows = await apiGet<ProductResponse[]>("/products");
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT_MS);
+    const rows = await apiGet<ProductResponse[]>("/products", { signal: controller.signal })
+      .finally(() => window.clearTimeout(timeoutId));
     const normalized = Array.isArray(rows) ? rows.map(normalizeProduct) : [];
     cachedProducts = normalized;
     storeProducts(normalized);

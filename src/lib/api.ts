@@ -67,7 +67,8 @@ export async function apiFetch<T = unknown>(path: string, options: ApiRequestIni
   return parseResponse(response) as Promise<T>;
 }
 
-export const apiGet = <T = unknown>(path: string) => apiFetch<T>(path, { method: "GET" });
+export const apiGet = <T = unknown>(path: string, options: Omit<ApiRequestInit, "method" | "body"> = {}) =>
+  apiFetch<T>(path, { ...options, method: "GET" });
 export const apiPost = <T = unknown>(path: string, body: unknown) => apiFetch<T>(path, { method: "POST", body });
 export const apiPut = <T = unknown>(path: string, body: unknown) => apiFetch<T>(path, { method: "PUT", body });
 export const apiDelete = <T = unknown>(path: string) => apiFetch<T>(path, { method: "DELETE" });

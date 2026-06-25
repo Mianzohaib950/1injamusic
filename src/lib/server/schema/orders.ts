@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 
 export const orders = pgTable("orders", {
   id: text("id").primaryKey(),
@@ -16,6 +16,7 @@ export const orders = pgTable("orders", {
   state: text("state").notNull(),
   zip: text("zip").notNull(),
   country: text("country").notNull(),
+  stockAdjusted: boolean("stock_adjusted").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

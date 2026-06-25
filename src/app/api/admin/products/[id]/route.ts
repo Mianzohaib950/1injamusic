@@ -7,6 +7,16 @@ import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 
 export const runtime = "nodejs";
 
+function normalizeStockBySize(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([size, quantity]) => [
+      String(size),
+      Math.max(0, Math.floor(Number(quantity) || 0)),
+    ]),
+  );
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -41,7 +51,7 @@ export async function PUT(
     await ensureServerSchema();
 
     const { id } = await context.params;
-    const { name, artist, artistSlug, category, price, originalPrice, image, imageHover, description, badge, inStock, sizes } = await readJson(request);
+    const { name, artist, artistSlug, category, price, originalPrice, image, imageHover, description, badge, inStock, sizes, stockBySize } = await readJson(request);
     const resolvedImage = image === undefined ? undefined : await uploadImageIfNeeded(image, "products/main");
     const resolvedImageHover = imageHover === undefined
       ? undefined
@@ -64,6 +74,7 @@ export async function PUT(
         badge: badge ?? null,
         inStock: inStock == null ? undefined : Boolean(inStock),
         sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : undefined,
+        stockBySize: normalizeStockBySize(stockBySize),
       })
       .where(eq(products.id, id));
 

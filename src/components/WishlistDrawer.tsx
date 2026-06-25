@@ -41,10 +41,11 @@ export default function WishlistDrawer() {
       badge,
       sizes: product.sizes,
       inStock: product.inStock,
+      stockBySize: (product as any).stockBySize,
     };
     const preferredSize = product.sizes?.[0] || "One Size";
-    const added = addToCart(mappedProduct, preferredSize, 1);
-    if (!added) {
+    const addResult = addToCart(mappedProduct, preferredSize, 1);
+    if (!addResult.ok && addResult.reason === "auth") {
       setWishlistOpen(false);
       navigate("/auth", { state: { from: "/shop", tab: "login" } });
     }
