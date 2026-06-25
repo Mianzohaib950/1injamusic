@@ -5,6 +5,13 @@ import { Search, X } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { artistProfiles, type ArtistProfile } from "@/data/artists";
 
+const ARTISTS_REQUEST_TIMEOUT_MS = 8_000;
+
+function isAbortError(error: unknown) {
+  const value = error as { name?: string; message?: string };
+  return value?.name === "AbortError" || /aborted/i.test(String(value?.message ?? ""));
+}
+
 const splitText = (text: string) => {
   return text.split("").map((char, index) => (
     <span key={index} className="inline-block opacity-0 translate-y-[60px]">
@@ -52,19 +59,29 @@ export default function Artists() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), ARTISTS_REQUEST_TIMEOUT_MS);
     const loadArtists = async () => {
       try {
-        const rows = await apiGet<ArtistProfile[]>("/artists");
-        if (active && Array.isArray(rows) && rows.length > 0) {
+        const rows = await apiGet<ArtistProfile[]>(`/artists?t=${Date.now()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (active && Array.isArray(rows)) {
           setArtists(rows);
         }
-      } catch {
+      } catch (error) {
+        if (isAbortError(error)) return;
         // Keep bundled artists as fallback when API is unavailable.
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     };
     loadArtists();
     return () => {
       active = false;
+      controller.abort();
+      window.clearTimeout(timeoutId);
     };
   }, []);
 

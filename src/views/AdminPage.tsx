@@ -205,6 +205,11 @@ async function fetchAdminData<T>(path: string) {
   return request;
 }
 
+function isAbortError(error: unknown) {
+  const value = error as { name?: string; message?: string };
+  return value?.name === "AbortError" || /aborted/i.test(String(value?.message ?? ""));
+}
+
 function AdminShell({ section, children }: { section: AdminSection; children: React.ReactNode }) {
   const navigate = useNavigate();
 
@@ -256,6 +261,7 @@ function useAdminData<T>(path: string, fallback: T) {
       const fresh = await fetchAdminData<T>(path);
       setData(fresh);
     } catch (error: any) {
+      if (isAbortError(error)) return;
       setError(error?.message ?? "Unable to load data.");
     }
   };

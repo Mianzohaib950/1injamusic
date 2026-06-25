@@ -5,6 +5,7 @@ import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { seedArtists } from "@/lib/server/artistSeed";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
@@ -17,7 +18,7 @@ export async function GET() {
       .where(eq(artists.active, true))
       .orderBy(asc(artists.sortOrder), asc(artists.name));
 
-    return json(rows);
+    return json(rows, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);
   }
