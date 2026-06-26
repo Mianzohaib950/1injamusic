@@ -4,6 +4,7 @@ import { json, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
@@ -13,7 +14,7 @@ export async function GET() {
       .from(categories)
       .where(eq(categories.active, true))
       .orderBy(asc(categories.sortOrder), asc(categories.name));
-    return json(rows);
+    return json(rows, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);
   }

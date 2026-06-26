@@ -31,7 +31,7 @@ export function getPool() {
     const connectionString = getConnectionString();
     globalThis.__dbPool = new Pool({
       connectionString,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: 3000,
       idleTimeoutMillis: 30000,
       ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
     });

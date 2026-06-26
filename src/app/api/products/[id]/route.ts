@@ -4,6 +4,7 @@ import { apiError, json } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _request: Request,
@@ -18,5 +19,5 @@ export async function GET(
     return apiError("Product not found", 404);
   }
 
-  return json(product);
+  return json(product, { headers: { "Cache-Control": "no-store" } });
 }

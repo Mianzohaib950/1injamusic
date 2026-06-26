@@ -9,6 +9,9 @@ import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
 import { apiGet } from "@/lib/api";
 import { artistProfiles, type ArtistProfile } from "@/data/artists";
+import { getCachedPublicArtists, upsertCachedPublicArtist } from "@/lib/publicArtistCache";
+
+const ARTIST_REQUEST_TIMEOUT_MS = 8_000;
 
 const splitText = (text: string) => {
   return text.split("").map((char, index) => (
@@ -57,6 +60,17 @@ function getFallbackArtist(slug: string) {
 
 type ArtistPageData = ArtistProfile & { releases: string[] };
 
+function toArtistPageData(row: ArtistProfile, slug: string): ArtistPageData {
+  const legacy = LEGACY_ARTIST_CONTENT[slug];
+  return {
+    ...row,
+    name: row.name.toUpperCase(),
+    bio: row.bio || legacy?.bio || "",
+    image: row.image || legacy?.image || "",
+    releases: legacy?.releases || [],
+  };
+}
+
 export default function ArtistPage() {
   const { artist } = useParams<{ artist: string }>();
   const heroRef = useRef<HTMLHeadingElement>(null);
@@ -80,6 +94,8 @@ export default function ArtistPage() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), ARTIST_REQUEST_TIMEOUT_MS);
     const loadArtist = async () => {
       if (!artist) {
         setLoading(false);
@@ -87,22 +103,22 @@ export default function ArtistPage() {
         return;
       }
 
-      setLoading(true);
+      const cached = getCachedPublicArtists()?.find((item) => item.slug === artist) ?? getFallbackArtist(artist);
+      setArtistData(cached ? toArtistPageData(cached, artist) : null);
+      setLoading(!cached);
       try {
-        const row = await apiGet<ArtistProfile>(`/artists/${artist}`);
-        const legacy = LEGACY_ARTIST_CONTENT[artist];
-        if (!active) return;
-        setArtistData({
-          ...row,
-          name: row.name.toUpperCase(),
-          bio: row.bio || legacy?.bio || "",
-          image: row.image || legacy?.image || "",
-          releases: legacy?.releases || [],
+        const row = await apiGet<ArtistProfile>(`/artists/${artist}?t=${Date.now()}`, {
+          cache: "no-store",
+          signal: controller.signal,
         });
+        if (!active) return;
+        setArtistData(toArtistPageData(row, artist));
+        upsertCachedPublicArtist(row);
       } catch {
         if (!active) return;
-        setArtistData(getFallbackArtist(artist));
+        if (!cached) setArtistData(getFallbackArtist(artist));
       } finally {
+        window.clearTimeout(timeoutId);
         if (active) setLoading(false);
       }
     };
@@ -110,6 +126,8 @@ export default function ArtistPage() {
     loadArtist();
     return () => {
       active = false;
+      controller.abort();
+      window.clearTimeout(timeoutId);
     };
   }, [artist]);
 

@@ -2,8 +2,18 @@ import { eventContacts, getDb, orderItems, orders, products, users, artists, boo
 import { requireAdminAuth } from "@/lib/server/admin";
 import { json, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
+import { listDevUsers } from "@/lib/server/devAuthStore";
 
 export const runtime = "nodejs";
+
+function normalizeStatus(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function countStatus(rows: Array<typeof orders.$inferSelect>, expected: string) {
+  const target = normalizeStatus(expected);
+  return rows.filter((order) => normalizeStatus(order.status) === target).length;
+}
 
 export async function GET(request: Request) {
   try {
@@ -22,20 +32,23 @@ export async function GET(request: Request) {
       db.select().from(eventContacts),
     ]);
 
+    const devUserRows = process.env.VERCEL ? [] : await listDevUsers();
+    const totalUsers = Math.max(userRows.length, devUserRows.length);
+
     const totalRevenueCents = orderRows.reduce(
-      (sum: number, order: typeof orders.$inferSelect) => sum + order.totalCents,
+      (sum: number, order: typeof orders.$inferSelect) => sum + Number(order.totalCents ?? 0),
       0,
     );
-    const pendingOrders = orderRows.filter((order: typeof orders.$inferSelect) => order.status === "Pending").length;
-    const processingOrders = orderRows.filter((order: typeof orders.$inferSelect) => order.status === "Processing").length;
-    const shippedOrders = orderRows.filter((order: typeof orders.$inferSelect) => order.status === "Shipped").length;
-    const deliveredOrders = orderRows.filter((order: typeof orders.$inferSelect) => order.status === "Delivered").length;
+    const pendingOrders = countStatus(orderRows, "Pending");
+    const processingOrders = countStatus(orderRows, "Processing");
+    const shippedOrders = countStatus(orderRows, "Shipped");
+    const deliveredOrders = countStatus(orderRows, "Delivered");
     const cancelledOrders = orderRows.filter((order: typeof orders.$inferSelect) => {
-      const status = String(order.status ?? "").toLowerCase();
+      const status = normalizeStatus(order.status);
       return status === "cancelled" || status === "canceled";
     }).length;
     const totalUnitsSold = orderItemRows.reduce(
-      (sum: number, item: typeof orderItems.$inferSelect) => sum + item.quantity,
+      (sum: number, item: typeof orderItems.$inferSelect) => sum + Number(item.quantity ?? 0),
       0,
     );
 
@@ -46,7 +59,7 @@ export async function GET(request: Request) {
         bookings: bookingRows.length,
         eventContacts: eventContactRows.length,
         orders: orderRows.length,
-        users: userRows.length,
+        users: totalUsers,
         revenueCents: totalRevenueCents,
         unitsSold: totalUnitsSold,
       },

@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { clearProductsCatalogCache } from "@/lib/productCatalogClient";
+import { getCachedPublicArtists, mergePublicArtists, removeCachedPublicArtist, upsertCachedPublicArtist } from "@/lib/publicArtistCache";
 import { merchProducts } from "@/data/merch";
 import { artistProfiles } from "@/data/artists";
 
@@ -60,12 +61,7 @@ const ADMIN_REQUEST_TIMEOUT_MS = 8_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
-const MEMORY_ONLY_CACHE_PREFIXES = [
-  "/admin/orders",
-  "/admin/users",
-  "/admin/bookings",
-  "/admin/event-contacts",
-];
+const MEMORY_ONLY_CACHE_PREFIXES: string[] = [];
 const dashboardFallback = {
   totals: {
     users: 0,
@@ -84,6 +80,75 @@ const dashboardFallback = {
     Cancelled: 0,
   },
 };
+
+function getCachedAdminList<T>(path: string, fallback: T[] = []) {
+  const cached = getAnyAdminCache<T[]>(path);
+  return Array.isArray(cached) ? cached : fallback;
+}
+
+function normalizeOrderStatus(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function makeDashboardFallback() {
+  const cachedDashboard = getAnyAdminCache<typeof dashboardFallback>("/admin/dashboard");
+  const productRows = getCachedAdminList<any>("/admin/products", merchProducts);
+  const artistRows = getCachedAdminList<any>("/admin/artists", artistProfiles);
+  const orderRows = getCachedAdminList<any>("/admin/orders");
+  const userRows = getCachedAdminList<any>("/admin/users");
+  const bookingRows = getCachedAdminList<any>("/admin/bookings");
+  const eventContactRows = getCachedAdminList<any>("/admin/event-contacts");
+  const revenueCents = orderRows.reduce((sum, order) => sum + Number(order.totalCents ?? order.total_cents ?? 0), 0);
+  const countStatus = (status: string) =>
+    orderRows.filter((order) => normalizeOrderStatus(order.status) === normalizeOrderStatus(status)).length;
+
+  const computed = {
+    totals: {
+      users: userRows.length,
+      orders: orderRows.length,
+      revenueCents,
+      products: productRows.length,
+      artists: artistRows.length,
+      bookings: bookingRows.length,
+      eventContacts: eventContactRows.length,
+    },
+    ordersByStatus: {
+      Pending: countStatus("Pending"),
+      Processing: countStatus("Processing"),
+      Shipped: countStatus("Shipped"),
+      Delivered: countStatus("Delivered"),
+      Cancelled: orderRows.filter((order) => {
+        const status = normalizeOrderStatus(order.status);
+        return status === "cancelled" || status === "canceled";
+      }).length,
+    },
+  };
+
+  if (!cachedDashboard) return computed;
+  const cachedStatus = cachedDashboard.ordersByStatus as Record<string, number | undefined>;
+
+  return {
+    totals: {
+      users: Math.max(Number(cachedDashboard.totals?.users ?? 0), computed.totals.users),
+      orders: Math.max(Number(cachedDashboard.totals?.orders ?? 0), computed.totals.orders),
+      revenueCents: Math.max(Number(cachedDashboard.totals?.revenueCents ?? 0), computed.totals.revenueCents),
+      products: Math.max(Number(cachedDashboard.totals?.products ?? 0), computed.totals.products),
+      artists: Math.max(Number(cachedDashboard.totals?.artists ?? 0), computed.totals.artists),
+      bookings: Math.max(Number(cachedDashboard.totals?.bookings ?? 0), computed.totals.bookings),
+      eventContacts: Math.max(Number(cachedDashboard.totals?.eventContacts ?? 0), computed.totals.eventContacts),
+    },
+    ordersByStatus: {
+      Pending: Math.max(Number(cachedDashboard.ordersByStatus?.Pending ?? 0), computed.ordersByStatus.Pending),
+      Processing: Math.max(Number(cachedDashboard.ordersByStatus?.Processing ?? 0), computed.ordersByStatus.Processing),
+      Shipped: Math.max(Number(cachedDashboard.ordersByStatus?.Shipped ?? 0), computed.ordersByStatus.Shipped),
+      Delivered: Math.max(Number(cachedDashboard.ordersByStatus?.Delivered ?? 0), computed.ordersByStatus.Delivered),
+      Cancelled: Math.max(
+        Number(cachedStatus.Cancelled ?? cachedStatus.Canceled ?? 0),
+        computed.ordersByStatus.Cancelled,
+      ),
+    },
+  };
+}
 
 function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -277,7 +342,12 @@ function useAdminData<T>(path: string, fallback: T) {
     load({ background: true });
   }, [path]);
 
-  return { data, loading, error, reload: () => load({ force: true }) };
+  const updateData = (nextData: T) => {
+    setData(nextData);
+    setAdminCache(path, nextData);
+  };
+
+  return { data, loading, error, reload: () => load({ force: true }), updateData };
 }
 
 function StatusText({ loading, error }: { loading: boolean; error: string }) {
@@ -477,7 +547,8 @@ function CheckboxDropdownField({
 }
 
 function Dashboard() {
-  const { data, loading, error } = useAdminData<any>("/admin/dashboard", dashboardFallback);
+  const initialDashboard = useMemo(() => makeDashboardFallback(), []);
+  const { data, loading, error } = useAdminData<any>("/admin/dashboard", initialDashboard);
   const statusEntries = useMemo(() => {
     const byStatus = (data?.ordersByStatus ?? {}) as Record<string, number>;
     return [
@@ -606,6 +677,7 @@ function ProductsPanel() {
   const save = async () => {
     const payload = {
       ...form,
+      id: toUrlSlug(form.id || form.name),
       imageHover: form.image,
       price: Number(form.price),
       originalPrice: form.originalPrice === "" ? null : Number(form.originalPrice),
@@ -682,7 +754,7 @@ function ProductsPanel() {
       </div>
       {showForm && (
         <div ref={productFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
-          <LabeledInput label="Product Slug" caption="URL-friendly product ID. Use lowercase letters, numbers, and hyphens only; no spaces." value={form.id ?? ""} onChange={(e) => { setAutoProductSlug(false); setForm({ ...form, id: e.target.value }); }} disabled={!!editingId} />
+          <LabeledInput label="Product Slug" caption="URL-friendly product ID. Auto-fills from Product Name; use lowercase letters, numbers, and hyphens only." value={form.id ?? ""} onChange={(e) => { setAutoProductSlug(false); setForm({ ...form, id: toUrlSlug(e.target.value) }); }} disabled={!!editingId} />
           <LabeledInput label="Product Name" caption="Enter the public product name; slug and badge will auto-fill from this." value={form.name ?? ""} onChange={(e) => updateProductName(e.target.value)} />
           <FileUrlField
             label="Product Image"
@@ -885,12 +957,15 @@ function CategoriesPanel() {
 
 function ArtistsPanel() {
   const blank = { slug: "", name: "", genres: "", bio: "", image: "", bookingEmail: "booking@1jamaicamusic.com", active: true, sortOrder: 0 };
-  const { data, loading, error, reload } = useAdminData<any[]>("/admin/artists", artistProfiles);
+  const artistFallback = getCachedPublicArtists() ?? artistProfiles;
+  const { data, loading, error, updateData } = useAdminData<any[]>("/admin/artists", artistFallback);
   const [form, setForm] = useState<any>(blank);
   const [editingSlug, setEditingSlug] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [artistImageFileName, setArtistImageFileName] = useState("");
+  const [autoArtistSlug, setAutoArtistSlug] = useState(true);
   const artistFormRef = useRef<HTMLDivElement>(null);
+  const displayArtists = mergePublicArtists([...(getCachedPublicArtists() ?? []), ...data]);
 
   const pickArtistImage = (file?: File) => {
     if (!file) return;
@@ -904,20 +979,30 @@ function ArtistsPanel() {
   };
 
   const save = async () => {
-    const payload = { ...form, genres: String(form.genres).split(",").map((item) => item.trim()).filter(Boolean), sortOrder: Number(form.sortOrder) };
-    if (editingSlug) await apiPut(`/admin/artists/${editingSlug}`, payload);
-    else await apiPost("/admin/artists", payload);
+    const payload = {
+      ...form,
+      slug: toUrlSlug(form.slug || form.name),
+      genres: String(form.genres).split(",").map((item) => item.trim()).filter(Boolean),
+      sortOrder: Number(form.sortOrder),
+    };
+    const saved = editingSlug
+      ? await apiPut<any>(`/admin/artists/${editingSlug}`, payload)
+      : await apiPost<any>("/admin/artists", payload);
+    const nextArtists = mergePublicArtists([...displayArtists.filter((artist) => artist.slug !== saved.slug), saved]);
+    upsertCachedPublicArtist(saved);
+    updateData(nextArtists);
     setForm(blank);
     setEditingSlug("");
     setArtistImageFileName("");
+    setAutoArtistSlug(true);
     setShowForm(false);
-    await reload();
   };
 
   const startAddArtist = () => {
     setForm(blank);
     setEditingSlug("");
     setArtistImageFileName("");
+    setAutoArtistSlug(true);
     setShowForm(true);
   };
 
@@ -925,7 +1010,16 @@ function ArtistsPanel() {
     setForm(blank);
     setEditingSlug("");
     setArtistImageFileName("");
+    setAutoArtistSlug(true);
     setShowForm(false);
+  };
+
+  const updateArtistName = (name: string) => {
+    setForm((current: any) => ({
+      ...current,
+      name,
+      slug: !editingSlug && autoArtistSlug ? toUrlSlug(name) : current.slug,
+    }));
   };
 
   return (
@@ -943,8 +1037,8 @@ function ArtistsPanel() {
       </div>
       {showForm && (
         <div ref={artistFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
-          <LabeledInput label="Slug" caption="URL-friendly artist name used in the page address. Use lowercase letters, numbers, and hyphens only." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
-          <LabeledInput label="Name" caption="Enter the artist name shown across the website." value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <LabeledInput label="Slug" caption="URL-friendly artist name used in the page address. Auto-fills from Name; use lowercase letters, numbers, and hyphens only." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => { setAutoArtistSlug(false); setForm({ ...form, slug: toUrlSlug(e.target.value) }); }} />
+          <LabeledInput label="Name" caption="Enter the artist name shown across the website; slug will auto-fill from this." value={form.name ?? ""} onChange={(e) => updateArtistName(e.target.value)} />
           <LabeledInput label="Genres" caption="Enter genres separated by commas, for example Dancehall,Hip-Hop." value={form.genres ?? ""} onChange={(e) => setForm({ ...form, genres: e.target.value })} />
           <LabeledInput label="Bio" caption="Write a short artist biography for the artist page." value={form.bio ?? ""} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
           <FileUrlField
@@ -971,10 +1065,15 @@ function ArtistsPanel() {
           <button className={actionClass} onClick={save}><Save size={16} /> {editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"}</button>
         </div>
       )}
-      <AdminTable rows={data} columns={["name", "slug", "genres", "active"]} formatCell={(_, column, value) => column === "active" ? (value ? "Active" : "Inactive") : undefined} actions={(row) => (
+      <AdminTable rows={displayArtists} columns={["name", "slug", "genres", "active"]} formatCell={(_, column, value) => column === "active" ? (value ? "Active" : "Inactive") : undefined} actions={(row) => (
         <>
-          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setArtistImageFileName(""); setShowForm(true); scrollToForm(artistFormRef); }}>EDIT</button>
-          <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/artists/${row.slug}`); await reload(); }}><Trash2 size={14} /></button>
+          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setArtistImageFileName(""); setAutoArtistSlug(false); setShowForm(true); scrollToForm(artistFormRef); }}>EDIT</button>
+          <button className={ghostClass} onClick={async () => {
+            await apiDelete(`/admin/artists/${row.slug}`);
+            const nextArtists = mergePublicArtists(displayArtists.filter((artist) => artist.slug !== row.slug));
+            removeCachedPublicArtist(row.slug);
+            updateData(nextArtists);
+          }}><Trash2 size={14} /></button>
         </>
       )} />
     </CrudLayout>
@@ -2106,6 +2205,7 @@ export default function AdminPage() {
       "/admin/categories",
       "/admin/cms/pages",
       "/admin/cms/sections?pageKey=home",
+      "/admin/cms/sections?pageKey=events",
       "/admin/products",
       "/admin/artists",
       "/admin/orders",
@@ -2125,7 +2225,7 @@ export default function AdminPage() {
       );
     };
 
-    window.setTimeout(prefetch, 50);
+    prefetch();
     return () => {
       cancelled = true;
     };

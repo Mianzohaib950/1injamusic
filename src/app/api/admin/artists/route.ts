@@ -7,6 +7,7 @@ import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function artistInput(body: any) {
   return {
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
 
     await seedArtists();
     const rows = await getDb().select().from(artists).orderBy(desc(artists.createdAt));
-    return json(rows);
+    return json(rows, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);
   }
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     };
 
     await getDb().insert(artists).values(resolvedItem);
-    return json(resolvedItem, { status: 201 });
+    return json(resolvedItem, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);
   }

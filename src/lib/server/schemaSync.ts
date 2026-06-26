@@ -246,7 +246,10 @@ export async function ensureServerSchema() {
          on conflict (id) do nothing;`,
       );
       await pool.query(`drop table if exists advertisements;`);
-    })();
+    })().catch((error) => {
+      globalThis.__schemaSyncPromise = undefined;
+      throw error;
+    });
   }
 
   await globalThis.__schemaSyncPromise;

@@ -6,6 +6,7 @@ import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: Request,
@@ -19,7 +20,7 @@ export async function GET(
     const { slug } = await context.params;
     const result = await getDb().select().from(artists).where(eq(artists.slug, slug));
     if (result.length === 0) return apiError("Artist not found", 404);
-    return json(result[0]);
+    return json(result[0], { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);
   }
@@ -52,7 +53,7 @@ export async function PUT(
     await db.update(artists).set(patch).where(eq(artists.slug, slug));
     const updated = await db.select().from(artists).where(eq(artists.slug, slug));
     if (updated.length === 0) return apiError("Artist not found", 404);
-    return json(updated[0]);
+    return json(updated[0], { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);
   }

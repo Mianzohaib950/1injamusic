@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { Search, X } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { artistProfiles, type ArtistProfile } from "@/data/artists";
+import { getCachedPublicArtists, setCachedPublicArtists } from "@/lib/publicArtistCache";
 
 const ARTISTS_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -22,7 +23,7 @@ const splitText = (text: string) => {
 
 export default function Artists() {
   const heroRef = useRef<HTMLHeadingElement>(null);
-  const [artists, setArtists] = useState<ArtistProfile[]>(artistProfiles);
+  const [artists, setArtists] = useState<ArtistProfile[]>(() => getCachedPublicArtists() ?? artistProfiles);
   const [heroTitle, setHeroTitle] = useState("OUR ARTISTS");
   const [heroBody, setHeroBody] = useState("Representing the sound of Jamaica to the world.");
   const [heroImage, setHeroImage] = useState("");
@@ -68,7 +69,7 @@ export default function Artists() {
           signal: controller.signal,
         });
         if (active && Array.isArray(rows)) {
-          setArtists(rows);
+          setArtists(setCachedPublicArtists(rows));
         }
       } catch (error) {
         if (isAbortError(error)) return;
