@@ -57,7 +57,7 @@ const productCategoryOptions = ["tee", "hoodie", "cap", "vinyl", "poster", "bund
 const productSizeOptions = ["S", "M", "L", "XL", "XXL"];
 const artistSortOrderOptions = Array.from({ length: 21 }, (_, index) => index);
 const ADMIN_CACHE_TTL_MS = 60_000;
-const ADMIN_REQUEST_TIMEOUT_MS = 8_000;
+const ADMIN_REQUEST_TIMEOUT_MS = 20_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
@@ -268,6 +268,10 @@ async function fetchAdminData<T>(path: string) {
 
   adminDataInflight.set(path, request as Promise<unknown>);
   return request;
+}
+
+function waitForAdminPrefetch(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function isAbortError(error: unknown) {
@@ -2217,15 +2221,16 @@ export default function AdminPage() {
     let cancelled = false;
     const prefetch = async () => {
       const missingPaths = prefetchPaths.filter((path) => !getFreshAdminCache(path));
-      await Promise.allSettled(
-        missingPaths.map(async (path) => {
-          if (cancelled) return;
-          await fetchAdminData(path);
-        }),
-      );
+      for (const path of missingPaths) {
+        if (cancelled) return;
+        await fetchAdminData(path).catch(() => null);
+        await waitForAdminPrefetch(150);
+      }
     };
 
-    prefetch();
+    window.setTimeout(() => {
+      if (!cancelled) prefetch();
+    }, 300);
     return () => {
       cancelled = true;
     };

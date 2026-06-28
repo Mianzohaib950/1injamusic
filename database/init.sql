@@ -44,6 +44,16 @@ create table if not exists products (
 alter table products add column if not exists sizes jsonb not null default '["One Size"]'::jsonb;
 alter table products add column if not exists stock_by_size jsonb not null default '{}'::jsonb;
 alter table if exists orders add column if not exists stock_adjusted boolean not null default false;
+alter table if exists bookings add column if not exists artist text not null default '';
+alter table if exists bookings add column if not exists event_type text not null default '';
+alter table if exists bookings add column if not exists event_date text not null default '';
+alter table if exists bookings add column if not exists status text not null default 'New';
+alter table if exists bookings add column if not exists updated_at timestamp not null default now();
+alter table if exists event_contacts add column if not exists artist text not null default '';
+alter table if exists event_contacts add column if not exists event_type text not null default '';
+alter table if exists event_contacts add column if not exists event_date text not null default '';
+alter table if exists event_contacts add column if not exists status text not null default 'New';
+alter table if exists event_contacts add column if not exists updated_at timestamp not null default now();
                         
 create table if not exists artists (
   slug text primary key,

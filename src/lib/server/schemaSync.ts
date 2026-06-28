@@ -19,6 +19,36 @@ export async function ensureServerSchema() {
         `alter table if exists orders add column if not exists stock_adjusted boolean not null default false;`,
       );
       await pool.query(
+        `alter table if exists bookings add column if not exists artist text not null default '';`,
+      );
+      await pool.query(
+        `alter table if exists bookings add column if not exists event_type text not null default '';`,
+      );
+      await pool.query(
+        `alter table if exists bookings add column if not exists event_date text not null default '';`,
+      );
+      await pool.query(
+        `alter table if exists bookings add column if not exists status text not null default 'New';`,
+      );
+      await pool.query(
+        `alter table if exists bookings add column if not exists updated_at timestamp not null default now();`,
+      );
+      await pool.query(
+        `alter table if exists event_contacts add column if not exists artist text not null default '';`,
+      );
+      await pool.query(
+        `alter table if exists event_contacts add column if not exists event_type text not null default '';`,
+      );
+      await pool.query(
+        `alter table if exists event_contacts add column if not exists event_date text not null default '';`,
+      );
+      await pool.query(
+        `alter table if exists event_contacts add column if not exists status text not null default 'New';`,
+      );
+      await pool.query(
+        `alter table if exists event_contacts add column if not exists updated_at timestamp not null default now();`,
+      );
+      await pool.query(
         `create table if not exists artists (
           slug text primary key,
           name text not null,

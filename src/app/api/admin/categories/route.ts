@@ -3,6 +3,7 @@ import { getDb, categories } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -18,9 +19,11 @@ export async function GET(request: Request) {
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
-    const rows = await getDb().select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name));
+    const rows = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      return getDb().select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name));
+    });
     return json(rows);
   } catch (error) {
     return serverError(error);
@@ -31,7 +34,6 @@ export async function POST(request: Request) {
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
     const body = await readJson<any>(request);
     const rawSlug = String(body.slug ?? "").trim();
@@ -49,7 +51,10 @@ export async function POST(request: Request) {
       sortOrder: Number(body.sortOrder ?? 0),
     };
 
-    await getDb().insert(categories).values(item);
+    await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      await getDb().insert(categories).values(item);
+    });
     return json(item, { status: 201 });
   } catch (error) {
     return serverError(error);

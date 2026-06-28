@@ -25,15 +25,15 @@ export async function GET(request: Request) {
         await ensureServerSchema();
 
         const db = getDb();
-        return Promise.all([
-          db.select().from(products),
-          db.select().from(orders),
-          db.select().from(users),
-          db.select().from(artists),
-          db.select().from(bookings),
-          db.select().from(orderItems),
-          db.select().from(eventContacts),
-        ]);
+        const productRows = await db.select().from(products);
+        const orderRows = await db.select().from(orders);
+        const userRows = await db.select().from(users);
+        const artistRows = await db.select().from(artists);
+        const bookingRows = await db.select().from(bookings);
+        const orderItemRows = await db.select().from(orderItems);
+        const eventContactRows = await db.select().from(eventContacts);
+
+        return [productRows, orderRows, userRows, artistRows, bookingRows, orderItemRows, eventContactRows];
       });
 
     const devUserRows = process.env.VERCEL ? [] : await listDevUsers();

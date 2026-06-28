@@ -5,6 +5,7 @@ import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -30,21 +31,24 @@ export async function GET(request: Request) {
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
-    const db = getDb();
     const pageKey = new URL(request.url).searchParams.get("pageKey")?.trim() || "home";
-    const [page] = await db.select().from(cmsPages).where(eq(cmsPages.pageKey, pageKey));
-    if (!page) return apiError(`CMS page not found: ${pageKey}`, 404);
-    const pageId = page.id;
-    const sections = await db.select().from(cmsSections).where(eq(cmsSections.pageId, pageId)).orderBy(asc(cmsSections.sortOrder));
-    const payload = await Promise.all(
-      sections.map(async (section: typeof cmsSections.$inferSelect) => {
+    const result = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      const db = getDb();
+      const [page] = await db.select().from(cmsPages).where(eq(cmsPages.pageKey, pageKey));
+      if (!page) return null;
+      const pageId = page.id;
+      const sections = await db.select().from(cmsSections).where(eq(cmsSections.pageId, pageId)).orderBy(asc(cmsSections.sortOrder));
+      const payload = [];
+      for (const section of sections) {
         const items = await db.select().from(cmsSectionItems).where(eq(cmsSectionItems.sectionId, section.id)).orderBy(asc(cmsSectionItems.sortOrder));
-        return { ...section, items };
-      }),
-    );
-    return json(payload);
+        payload.push({ ...section, items });
+      }
+      return payload;
+    });
+    if (!result) return apiError(`CMS page not found: ${pageKey}`, 404);
+    return json(result);
   } catch (error) {
     return serverError(error);
   }
