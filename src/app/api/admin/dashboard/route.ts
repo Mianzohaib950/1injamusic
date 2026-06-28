@@ -3,6 +3,7 @@ import { requireAdminAuth } from "@/lib/server/admin";
 import { json, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { listDevUsers } from "@/lib/server/devAuthStore";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -19,18 +20,21 @@ export async function GET(request: Request) {
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
+    const [productRows, orderRows, userRows, artistRows, bookingRows, orderItemRows, eventContactRows] =
+      await withDatabaseRetry(async () => {
+        await ensureServerSchema();
 
-    const db = getDb();
-    const [productRows, orderRows, userRows, artistRows, bookingRows, orderItemRows, eventContactRows] = await Promise.all([
-      db.select().from(products),
-      db.select().from(orders),
-      db.select().from(users),
-      db.select().from(artists),
-      db.select().from(bookings),
-      db.select().from(orderItems),
-      db.select().from(eventContacts),
-    ]);
+        const db = getDb();
+        return Promise.all([
+          db.select().from(products),
+          db.select().from(orders),
+          db.select().from(users),
+          db.select().from(artists),
+          db.select().from(bookings),
+          db.select().from(orderItems),
+          db.select().from(eventContacts),
+        ]);
+      });
 
     const devUserRows = process.env.VERCEL ? [] : await listDevUsers();
     const totalUsers = Math.max(userRows.length, devUserRows.length);

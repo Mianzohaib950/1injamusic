@@ -107,10 +107,7 @@ export default function ArtistPage() {
       setArtistData(cached ? toArtistPageData(cached, artist) : null);
       setLoading(!cached);
       try {
-        const row = await apiGet<ArtistProfile>(`/artists/${artist}?t=${Date.now()}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const row = await apiGet<ArtistProfile>(`/artists/${artist}`, { signal: controller.signal });
         if (!active) return;
         setArtistData(toArtistPageData(row, artist));
         upsertCachedPublicArtist(row);

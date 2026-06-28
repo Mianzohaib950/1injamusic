@@ -5,6 +5,7 @@ import { seedArtists } from "@/lib/server/artistSeed";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,10 +27,12 @@ export async function GET(request: Request) {
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
-    await seedArtists();
-    const rows = await getDb().select().from(artists).orderBy(desc(artists.createdAt));
+    const rows = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      await seedArtists();
+      return getDb().select().from(artists).orderBy(desc(artists.createdAt));
+    });
     return json(rows, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);
@@ -40,7 +43,6 @@ export async function POST(request: Request) {
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
     const body = await readJson(request);
     const item = artistInput(body);
@@ -53,7 +55,10 @@ export async function POST(request: Request) {
       image: await uploadImageIfNeeded(item.image, "artists/profile"),
     };
 
-    await getDb().insert(artists).values(resolvedItem);
+    await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      await getDb().insert(artists).values(resolvedItem);
+    });
     return json(resolvedItem, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);

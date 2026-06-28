@@ -34,7 +34,8 @@ export function getCachedPublicArtists() {
 }
 
 export function setCachedPublicArtists(rows: ArtistProfile[]) {
-  const merged = mergePublicArtists(rows);
+  const current = getCachedPublicArtists() ?? [];
+  const merged = mergePublicArtists([...current, ...rows]);
   if (typeof window === "undefined") return merged;
   try {
     window.sessionStorage.setItem(PUBLIC_ARTISTS_CACHE_KEY, JSON.stringify(merged));

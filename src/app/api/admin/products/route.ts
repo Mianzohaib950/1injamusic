@@ -4,6 +4,7 @@ import { requireAdmin, requireAuth } from "@/lib/server/auth";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -32,9 +33,10 @@ export async function GET(request: Request) {
 
     const adminError = requireAdmin(auth);
     if (adminError) return adminError;
-    await ensureServerSchema();
-
-    const items = await getDb().select().from(products).orderBy(desc(products.createdAt));
+    const items = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      return getDb().select().from(products).orderBy(desc(products.createdAt));
+    });
     return json(items);
   } catch (error) {
     return serverError(error);
@@ -79,7 +81,10 @@ export async function POST(request: Request) {
       sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : ["One Size"],
       stockBySize: normalizeStockBySize(stockBySize),
     };
-    await getDb().insert(products).values(item);
+    await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      await getDb().insert(products).values(item);
+    });
     return json(item, { status: 201 });
   } catch (error) {
     return serverError(error);

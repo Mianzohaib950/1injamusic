@@ -72,6 +72,7 @@ export async function uploadImageIfNeeded(value: unknown, folder: string) {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
       "Content-Type": parsed.mimeType,
+      "Cache-Control": "public, max-age=31536000, immutable",
       "x-upsert": "true",
     },
     body: buffer,

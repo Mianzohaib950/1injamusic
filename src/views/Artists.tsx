@@ -64,10 +64,7 @@ export default function Artists() {
     const timeoutId = window.setTimeout(() => controller.abort(), ARTISTS_REQUEST_TIMEOUT_MS);
     const loadArtists = async () => {
       try {
-        const rows = await apiGet<ArtistProfile[]>(`/artists?t=${Date.now()}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const rows = await apiGet<ArtistProfile[]>("/artists", { signal: controller.signal });
         if (active && Array.isArray(rows)) {
           setArtists(setCachedPublicArtists(rows));
         }

@@ -31,12 +31,26 @@ export function getPool() {
     const connectionString = getConnectionString();
     globalThis.__dbPool = new Pool({
       connectionString,
-      connectionTimeoutMillis: 3000,
+      max: 3,
+      connectionTimeoutMillis: 10000,
       idleTimeoutMillis: 30000,
+      keepAlive: true,
       ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
     });
   }
   return globalThis.__dbPool;
+}
+
+export async function resetDbConnection() {
+  const pool = globalThis.__dbPool;
+  globalThis.__dbPool = undefined;
+  globalThis.__db = undefined;
+  if (!pool) return;
+  try {
+    await pool.end();
+  } catch {
+    // Ignore cleanup errors; the next request will create a fresh pool.
+  }
 }
 
 export function getDb() {

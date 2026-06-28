@@ -4,6 +4,7 @@ import { requireAdmin, requireAuth } from "@/lib/server/auth";
 import { apiError, json, noContent, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -27,10 +28,11 @@ export async function GET(
 
     const adminError = requireAdmin(auth);
     if (adminError) return adminError;
-    await ensureServerSchema();
-
     const { id } = await context.params;
-    const result = await getDb().select().from(products).where(eq(products.id, id));
+    const result = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      return getDb().select().from(products).where(eq(products.id, id));
+    });
     if (result.length === 0) return apiError("Product not found", 404);
     return json(result[0]);
   } catch (error) {
@@ -48,8 +50,6 @@ export async function PUT(
 
     const adminError = requireAdmin(auth);
     if (adminError) return adminError;
-    await ensureServerSchema();
-
     const { id } = await context.params;
     const { name, artist, artistSlug, category, price, originalPrice, image, imageHover, description, badge, inStock, sizes, stockBySize } = await readJson(request);
     const resolvedImage = image === undefined ? undefined : await uploadImageIfNeeded(image, "products/main");
@@ -58,27 +58,30 @@ export async function PUT(
       : imageHover && imageHover !== image
         ? await uploadImageIfNeeded(imageHover, "products/hover")
         : resolvedImage ?? imageHover ?? image;
-    const db = getDb();
-    await db
-      .update(products)
-      .set({
-        name,
-        artist,
-        artistSlug,
-        category,
-        price: price == null ? undefined : Number(price),
-        originalPrice: originalPrice == null ? null : Number(originalPrice),
-        image: resolvedImage,
-        imageHover: resolvedImageHover,
-        description,
-        badge: badge ?? null,
-        inStock: inStock == null ? undefined : Boolean(inStock),
-        sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : undefined,
-        stockBySize: normalizeStockBySize(stockBySize),
-      })
-      .where(eq(products.id, id));
+    const updated = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      const db = getDb();
+      await db
+        .update(products)
+        .set({
+          name,
+          artist,
+          artistSlug,
+          category,
+          price: price == null ? undefined : Number(price),
+          originalPrice: originalPrice == null ? null : Number(originalPrice),
+          image: resolvedImage,
+          imageHover: resolvedImageHover,
+          description,
+          badge: badge ?? null,
+          inStock: inStock == null ? undefined : Boolean(inStock),
+          sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : undefined,
+          stockBySize: normalizeStockBySize(stockBySize),
+        })
+        .where(eq(products.id, id));
 
-    const updated = await db.select().from(products).where(eq(products.id, id));
+      return db.select().from(products).where(eq(products.id, id));
+    });
     if (updated.length === 0) return apiError("Product not found", 404);
     return json(updated[0]);
   } catch (error) {
@@ -96,10 +99,11 @@ export async function DELETE(
 
     const adminError = requireAdmin(auth);
     if (adminError) return adminError;
-    await ensureServerSchema();
-
     const { id } = await context.params;
-    await getDb().delete(products).where(eq(products.id, id));
+    await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      await getDb().delete(products).where(eq(products.id, id));
+    });
     return noContent();
   } catch (error) {
     return serverError(error);
