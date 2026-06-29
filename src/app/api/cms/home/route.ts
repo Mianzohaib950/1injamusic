@@ -15,12 +15,11 @@ export async function GET() {
       const [page] = await db.select().from(cmsPages).where(eq(cmsPages.pageKey, "home"));
       const pageId = page?.id ?? "home-page";
       const sections = await db.select().from(cmsSections).where(eq(cmsSections.pageId, pageId)).orderBy(asc(cmsSections.sortOrder));
-      const sectionItems = await Promise.all(
-        sections.map(async (section: typeof cmsSections.$inferSelect) => {
-          const items = await db.select().from(cmsSectionItems).where(eq(cmsSectionItems.sectionId, section.id)).orderBy(asc(cmsSectionItems.sortOrder));
-          return { ...section, items };
-        }),
-      );
+      const sectionItems = [];
+      for (const section of sections) {
+        const items = await db.select().from(cmsSectionItems).where(eq(cmsSectionItems.sectionId, section.id)).orderBy(asc(cmsSectionItems.sortOrder));
+        sectionItems.push({ ...section, items });
+      }
       return { homePage: page, payload: sectionItems };
     });
 

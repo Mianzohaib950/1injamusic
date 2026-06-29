@@ -5,6 +5,7 @@ import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -33,10 +34,12 @@ export async function GET(
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
     const { id } = await context.params;
-    const items = await getDb().select().from(cmsSectionItems).where(eq(cmsSectionItems.sectionId, id)).orderBy(asc(cmsSectionItems.sortOrder));
+    const items = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      return getDb().select().from(cmsSectionItems).where(eq(cmsSectionItems.sectionId, id)).orderBy(asc(cmsSectionItems.sortOrder));
+    });
     return json(items);
   } catch (error) {
     return serverError(error);
@@ -50,7 +53,6 @@ export async function POST(
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
     const { id } = await context.params;
     const body = await readJson(request);
@@ -58,7 +60,10 @@ export async function POST(
     payload.imageUrl = String(await uploadImageIfNeeded(payload.imageUrl, "cms/items"));
     const itemId = String(body.id ?? randomUUID());
     const row = { id: itemId, ...payload, updatedAt: new Date() };
-    await getDb().insert(cmsSectionItems).values(row);
+    await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      await getDb().insert(cmsSectionItems).values(row);
+    });
     return json(row, { status: 201 });
   } catch (error) {
     return serverError(error);

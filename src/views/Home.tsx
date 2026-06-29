@@ -70,7 +70,7 @@ export default function Home() {
     let active = true;
     const loadCms = async () => {
       try {
-        const response = await fetch("/api/cms/home", { method: "GET" });
+        const response = await fetch("/api/cms/home", { cache: "no-store", method: "GET" });
         if (!response.ok) return;
         const data = await response.json();
         if (!active) return;

@@ -39,7 +39,7 @@ export default function Navigation() {
     let active = true;
     const loadNav = async () => {
       try {
-        const rows = await apiGet<CmsNavPage[]>("/cms/pages");
+        const rows = await apiGet<CmsNavPage[]>("/cms/pages", { cache: "no-store" });
         if (!active || !Array.isArray(rows) || rows.length === 0) return;
 
         const order: Record<string, number> = {

@@ -71,7 +71,7 @@ export default function CmsPage() {
     const load = async () => {
       setNotFound(false);
       try {
-        const response = await apiGet<CmsPageResponse>(`/cms/${encodeURIComponent(pageKey)}`);
+        const response = await apiGet<CmsPageResponse>(`/cms/${encodeURIComponent(pageKey)}`, { cache: "no-store" });
         if (!active) return;
         setData(response);
         try {

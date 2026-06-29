@@ -30,16 +30,15 @@ export async function GET(
         .where(eq(cmsSections.pageId, selectedPage.id))
         .orderBy(asc(cmsSections.sortOrder));
 
-      const sectionItems = await Promise.all(
-        sections.map(async (section: typeof cmsSections.$inferSelect) => {
-          const items = await db
-            .select()
-            .from(cmsSectionItems)
-            .where(eq(cmsSectionItems.sectionId, section.id))
-            .orderBy(asc(cmsSectionItems.sortOrder));
-          return { ...section, items };
-        }),
-      );
+      const sectionItems = [];
+      for (const section of sections) {
+        const items = await db
+          .select()
+          .from(cmsSectionItems)
+          .where(eq(cmsSectionItems.sectionId, section.id))
+          .orderBy(asc(cmsSectionItems.sortOrder));
+        sectionItems.push({ ...section, items });
+      }
 
       return { page: selectedPage, payload: sectionItems };
     });

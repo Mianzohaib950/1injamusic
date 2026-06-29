@@ -89,7 +89,7 @@ export default function EventDetail() {
     let active = true;
     const loadCms = async () => {
       try {
-        const data = await apiGet<any>("/cms/events");
+        const data = await apiGet<any>("/cms/events", { cache: "no-store" });
         if (!active) return;
         const sections = Array.isArray(data?.sections) ? data.sections : [];
         const content = sections.find((section: any) => section.sectionKey === "content");

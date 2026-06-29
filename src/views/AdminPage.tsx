@@ -250,6 +250,24 @@ function setAdminCache(path: string, data: unknown) {
   }
 }
 
+function clearPublicCmsPageCache(pageKey?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    if (pageKey) {
+      window.sessionStorage.removeItem(`cms-page:${String(pageKey).toLowerCase()}`);
+      return;
+    }
+    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.sessionStorage.key(index);
+      if (key?.startsWith("cms-page:")) {
+        window.sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Ignore storage cleanup errors.
+  }
+}
+
 async function fetchAdminData<T>(path: string) {
   const existing = adminDataInflight.get(path);
   if (existing) return existing as Promise<T>;
@@ -1277,6 +1295,7 @@ function CmsPanel() {
     const title = newPageTitle.trim();
     if (!pageKey) return;
     await apiPost("/admin/cms/pages", { pageKey, title: title || pageKey, active: true });
+    clearPublicCmsPageCache(pageKey);
     setNewPageKey("");
     setNewPageTitle("");
     setShowPageForm(false);
@@ -1315,6 +1334,7 @@ function CmsPanel() {
       title: pageEditTitle.trim(),
       active: pageEditActive,
     });
+    clearPublicCmsPageCache(selectedPageKey);
     setEditingPageId("");
     setPageEditTitle("");
     setPageEditActive(true);
@@ -1325,6 +1345,7 @@ function CmsPanel() {
   const deletePage = async (page: CmsPage) => {
     if (protectedPageKeys.has(page.pageKey)) return;
     await apiDelete(`/admin/cms/pages/${page.id}`);
+    clearPublicCmsPageCache(page.pageKey);
     await reloadPages();
     if (selectedPageKey === page.pageKey) {
       setSelectedPageKey("home");
@@ -1390,6 +1411,7 @@ function CmsPanel() {
     };
     if (editingSectionId) await apiPut(`/admin/cms/sections/${editingSectionId}`, payload);
     else await apiPost("/admin/cms/sections", payload);
+    clearPublicCmsPageCache(selectedPageKey);
     setEditingSectionId("");
     setAutoSectionKey(true);
     setSectionForm({
@@ -1467,6 +1489,7 @@ function CmsPanel() {
     };
     if (editingItemId) await apiPut(`/admin/cms/items/${editingItemId}`, payload);
     else await apiPost(`/admin/cms/sections/${selectedSectionId}/items`, payload);
+    clearPublicCmsPageCache(selectedPageKey);
     setEditingItemId("");
     setItemForm({
       itemKey: "",
@@ -1663,7 +1686,7 @@ function CmsPanel() {
               scrollToForm(sectionFormRef);
             }}>EDIT</button>
             <button className={compactActionClass} onClick={() => openSectionItems(row.id)}>ITEMS</button>
-            <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/sections/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
+            <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/sections/${row.id}`); clearPublicCmsPageCache(selectedPageKey); await reload(); }}><Trash2 size={12} /></button>
           </>
         )}
       />
@@ -1739,7 +1762,7 @@ function CmsPanel() {
                   setShowItemForm(true);
                   scrollToForm(itemFormRef);
                 }}>EDIT</button>
-                <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/items/${row.id}`); await reload(); }}><Trash2 size={12} /></button>
+                <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/items/${row.id}`); clearPublicCmsPageCache(selectedPageKey); await reload(); }}><Trash2 size={12} /></button>
               </>
             )}
           />

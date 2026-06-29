@@ -135,7 +135,7 @@ export default function Events() {
     let active = true;
     const loadArtists = async () => {
       try {
-        const rows = await apiGet<ArtistProfile[]>("/artists");
+        const rows = await apiGet<ArtistProfile[]>("/artists", { cache: "no-store" });
         if (!active) return;
         if (Array.isArray(rows) && rows.length > 0) {
           setArtists(rows.filter((artist) => artist.active !== false));
@@ -154,7 +154,7 @@ export default function Events() {
     let active = true;
     const loadCms = async () => {
       try {
-        const data = await apiGet<any>("/cms/events");
+        const data = await apiGet<any>("/cms/events", { cache: "no-store" });
         if (!active) return;
         const sections = Array.isArray(data?.sections) ? data.sections : [];
         const hero = sections.find((section: any) => section.sectionKey === "hero");

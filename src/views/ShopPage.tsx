@@ -137,7 +137,7 @@ export default function ShopPage() {
     let active = true;
     const loadCms = async () => {
       try {
-        const data = await apiGet<any>("/cms/shop");
+        const data = await apiGet<any>("/cms/shop", { cache: "no-store" });
         if (!active) return;
         const sections = Array.isArray(data?.sections) ? data.sections : [];
         const hero = sections.find((section: any) => section.sectionKey === "hero");
@@ -162,7 +162,7 @@ export default function ShopPage() {
     let active = true;
     const loadCategories = async () => {
       try {
-        const rows = await apiGet<any[]>("/categories");
+        const rows = await apiGet<any[]>("/categories", { cache: "no-store" });
         if (!active || !Array.isArray(rows)) return;
         const options = rows
           .map((row) => String(row.slug ?? "").trim().toUpperCase())

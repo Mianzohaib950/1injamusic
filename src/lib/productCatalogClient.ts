@@ -79,7 +79,7 @@ export async function loadProductsCatalog(options: { force?: boolean } = {}) {
   inFlight = (async () => {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT_MS);
-    const rows = await apiGet<ProductResponse[]>("/products", { signal: controller.signal })
+    const rows = await apiGet<ProductResponse[]>("/products", { cache: "no-store", signal: controller.signal })
       .finally(() => window.clearTimeout(timeoutId));
     const normalized = Array.isArray(rows) ? rows.map(normalizeProduct) : [];
     cachedProducts = normalized;

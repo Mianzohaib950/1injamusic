@@ -4,6 +4,7 @@ import { requireAdminAuth } from "@/lib/server/admin";
 import { apiError, json, noContent, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
+import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,6 @@ export async function PUT(
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
     const { itemId } = await context.params;
     const body = await readJson(request);
@@ -35,9 +35,13 @@ export async function PUT(
       updatedAt: new Date(),
     };
 
-    const db = getDb();
-    await db.update(cmsSectionItems).set(patch).where(eq(cmsSectionItems.id, itemId));
-    const [updated] = await db.select().from(cmsSectionItems).where(eq(cmsSectionItems.id, itemId));
+    const updated = await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      const db = getDb();
+      await db.update(cmsSectionItems).set(patch).where(eq(cmsSectionItems.id, itemId));
+      const [updated] = await db.select().from(cmsSectionItems).where(eq(cmsSectionItems.id, itemId));
+      return updated;
+    });
     if (!updated) return apiError("Item not found", 404);
     return json(updated);
   } catch (error) {
@@ -52,10 +56,12 @@ export async function DELETE(
   try {
     const auth = requireAdminAuth(request);
     if (auth instanceof Response) return auth;
-    await ensureServerSchema();
 
     const { itemId } = await context.params;
-    await getDb().delete(cmsSectionItems).where(eq(cmsSectionItems.id, itemId));
+    await withDatabaseRetry(async () => {
+      await ensureServerSchema();
+      await getDb().delete(cmsSectionItems).where(eq(cmsSectionItems.id, itemId));
+    });
     return noContent();
   } catch (error) {
     return serverError(error);

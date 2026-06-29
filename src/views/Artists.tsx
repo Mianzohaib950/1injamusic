@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import gsap from "gsap";
-import { Search, X } from "lucide-react";
+import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { artistProfiles, type ArtistProfile } from "@/data/artists";
 import { getCachedPublicArtists, setCachedPublicArtists } from "@/lib/publicArtistCache";
@@ -29,11 +29,25 @@ export default function Artists() {
   const [heroImage, setHeroImage] = useState("");
   const [contentTitle, setContentTitle] = useState("OUR ARTISTS");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedArtist, setSelectedArtist] = useState("All Artists");
+  const artistOptions = useMemo(
+    () => ["All Artists", ...Array.from(new Set(artists.map((artist) => artist.name).filter(Boolean)))],
+    [artists],
+  );
+  const visibleArtistOptions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return artistOptions;
+    return artistOptions.filter((artist) => artist.toLowerCase().includes(query));
+  }, [artistOptions, searchQuery]);
+  const artistFilterLabel = selectedArtist === "All Artists" ? "All Artists" : selectedArtist;
+  const hasActiveFilters = selectedArtist !== "All Artists" || searchQuery.trim().length > 0;
   const filteredArtists = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return artists;
-
     return artists.filter((artist) => {
+      const artistMatch = selectedArtist === "All Artists" || artist.name === selectedArtist;
+      if (!artistMatch) return false;
+      if (!query) return true;
+
       const searchable = [
         artist.name,
         artist.slug,
@@ -42,7 +56,12 @@ export default function Artists() {
       ].join(" ").toLowerCase();
       return searchable.includes(query);
     });
-  }, [artists, searchQuery]);
+  }, [artists, searchQuery, selectedArtist]);
+
+  const resetArtistFilters = () => {
+    setSelectedArtist("All Artists");
+    setSearchQuery("");
+  };
 
   useEffect(() => {
     const chars = heroRef.current?.querySelectorAll("span");
@@ -64,7 +83,7 @@ export default function Artists() {
     const timeoutId = window.setTimeout(() => controller.abort(), ARTISTS_REQUEST_TIMEOUT_MS);
     const loadArtists = async () => {
       try {
-        const rows = await apiGet<ArtistProfile[]>("/artists", { signal: controller.signal });
+        const rows = await apiGet<ArtistProfile[]>("/artists", { cache: "no-store", signal: controller.signal });
         if (active && Array.isArray(rows)) {
           setArtists(setCachedPublicArtists(rows));
         }
@@ -84,10 +103,16 @@ export default function Artists() {
   }, []);
 
   useEffect(() => {
+    if (selectedArtist !== "All Artists" && !artistOptions.includes(selectedArtist)) {
+      setSelectedArtist("All Artists");
+    }
+  }, [artistOptions, selectedArtist]);
+
+  useEffect(() => {
     let active = true;
     const loadCms = async () => {
       try {
-        const data = await apiGet<any>("/cms/artists");
+        const data = await apiGet<any>("/cms/artists", { cache: "no-store" });
         if (!active) return;
         const sections = Array.isArray(data?.sections) ? data.sections : [];
         const hero = sections.find((section: any) => section.sectionKey === "hero");
@@ -132,22 +157,58 @@ export default function Artists() {
 
         <div className="mb-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{contentTitle}</span>
-          <div className="relative w-full md:w-[360px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand-yellow)]" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search artists"
-              className="w-full border border-[#333] bg-[#0A0A0A] py-3 pl-10 pr-10 font-sans text-sm text-white outline-none transition-colors placeholder:text-[var(--brand-gray)] focus:border-[var(--brand-yellow)]"
-              aria-label="Search artists"
-            />
-            {searchQuery && (
+          <div className="flex w-full flex-wrap items-center justify-start gap-2 md:w-auto md:justify-end">
+            <SlidersHorizontal size={16} className="text-[var(--brand-yellow)]" />
+            <details className="group relative w-full md:w-[360px]">
+              <summary className="list-none inline-flex w-full cursor-pointer items-center justify-between gap-3 border border-[#333] bg-[#0A0A0A] px-4 py-3 font-bebas text-sm tracking-widest text-[var(--brand-gray)] transition-colors hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]">
+                <span>ARTIST: {artistFilterLabel.toUpperCase()}</span>
+                <ChevronDown className="h-4 w-4 text-[var(--brand-yellow)] transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="absolute right-0 top-full z-40 mt-2 w-full border border-[#333] bg-[#111] p-3 shadow-2xl">
+                <div className="relative mb-3">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand-yellow)]" />
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search artists"
+                    className="w-full border border-[#333] bg-[#0A0A0A] py-2.5 pl-10 pr-9 font-sans text-sm text-white outline-none transition-colors placeholder:text-[var(--brand-gray)] focus:border-[var(--brand-yellow)]"
+                    aria-label="Search artists"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--brand-gray)] transition-colors hover:text-white"
+                      aria-label="Clear artist search"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-72 overflow-y-auto pr-1">
+                  {visibleArtistOptions.map((artist) => (
+                    <label key={artist} className="flex cursor-pointer items-center gap-2 px-2 py-2 font-bebas text-sm tracking-widest text-white hover:bg-white/5">
+                      <input
+                        type="radio"
+                        checked={selectedArtist === artist}
+                        onChange={() => setSelectedArtist(artist)}
+                        className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
+                      />
+                      {artist.toUpperCase()}
+                    </label>
+                  ))}
+                  {visibleArtistOptions.length === 0 && (
+                    <p className="px-2 py-3 font-bebas text-sm tracking-widest text-[var(--brand-gray)]">NO ARTISTS FOUND</p>
+                  )}
+                </div>
+              </div>
+            </details>
+            {hasActiveFilters && (
               <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--brand-gray)] transition-colors hover:text-white"
-                aria-label="Clear artist search"
+                onClick={resetArtistFilters}
+                className="inline-flex items-center gap-1 border border-[#333] px-4 py-3 font-bebas text-sm tracking-widest text-[var(--brand-gray)] transition-colors hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
               >
-                <X size={16} />
+                <X size={13} />
+                CLEAR FILTERS
               </button>
             )}
           </div>
