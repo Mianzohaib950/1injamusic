@@ -29,22 +29,19 @@ export default function Artists() {
   const [heroImage, setHeroImage] = useState("");
   const [contentTitle, setContentTitle] = useState("OUR ARTISTS");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedArtist, setSelectedArtist] = useState("All Artists");
-  const artistOptions = useMemo(
-    () => ["All Artists", ...Array.from(new Set(artists.map((artist) => artist.name).filter(Boolean)))],
-    [artists],
-  );
+  const [selectedArtists, setSelectedArtists] = useState<string[]>([]);
+  const artistOptions = useMemo(() => Array.from(new Set(artists.map((artist) => artist.name).filter(Boolean))), [artists]);
   const visibleArtistOptions = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return artistOptions;
     return artistOptions.filter((artist) => artist.toLowerCase().includes(query));
   }, [artistOptions, searchQuery]);
-  const artistFilterLabel = selectedArtist === "All Artists" ? "All Artists" : selectedArtist;
-  const hasActiveFilters = selectedArtist !== "All Artists" || searchQuery.trim().length > 0;
+  const artistFilterLabel = selectedArtists.length === 0 ? "All Artists" : `${selectedArtists.length} Selected`;
+  const hasActiveFilters = selectedArtists.length > 0 || searchQuery.trim().length > 0;
   const filteredArtists = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return artists.filter((artist) => {
-      const artistMatch = selectedArtist === "All Artists" || artist.name === selectedArtist;
+      const artistMatch = selectedArtists.length === 0 || selectedArtists.includes(artist.name);
       if (!artistMatch) return false;
       if (!query) return true;
 
@@ -56,11 +53,19 @@ export default function Artists() {
       ].join(" ").toLowerCase();
       return searchable.includes(query);
     });
-  }, [artists, searchQuery, selectedArtist]);
+  }, [artists, searchQuery, selectedArtists]);
 
   const resetArtistFilters = () => {
-    setSelectedArtist("All Artists");
+    setSelectedArtists([]);
     setSearchQuery("");
+  };
+
+  const toggleArtist = (artistName: string) => {
+    setSelectedArtists((current) =>
+      current.includes(artistName)
+        ? current.filter((item) => item !== artistName)
+        : [...current, artistName],
+    );
   };
 
   useEffect(() => {
@@ -103,10 +108,8 @@ export default function Artists() {
   }, []);
 
   useEffect(() => {
-    if (selectedArtist !== "All Artists" && !artistOptions.includes(selectedArtist)) {
-      setSelectedArtist("All Artists");
-    }
-  }, [artistOptions, selectedArtist]);
+    setSelectedArtists((current) => current.filter((name) => artistOptions.includes(name)));
+  }, [artistOptions]);
 
   useEffect(() => {
     let active = true;
@@ -185,12 +188,21 @@ export default function Artists() {
                   )}
                 </div>
                 <div className="max-h-72 overflow-y-auto pr-1">
+                  <label className="flex cursor-pointer items-center gap-2 px-2 py-2 font-bebas text-sm tracking-widest text-white hover:bg-white/5">
+                    <input
+                      type="checkbox"
+                      checked={selectedArtists.length === 0}
+                      onChange={() => setSelectedArtists([])}
+                      className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
+                    />
+                    ALL ARTISTS
+                  </label>
                   {visibleArtistOptions.map((artist) => (
                     <label key={artist} className="flex cursor-pointer items-center gap-2 px-2 py-2 font-bebas text-sm tracking-widest text-white hover:bg-white/5">
                       <input
-                        type="radio"
-                        checked={selectedArtist === artist}
-                        onChange={() => setSelectedArtist(artist)}
+                        type="checkbox"
+                        checked={selectedArtists.includes(artist)}
+                        onChange={() => toggleArtist(artist)}
                         className="h-3.5 w-3.5 accent-[var(--brand-yellow)]"
                       />
                       {artist.toUpperCase()}

@@ -507,12 +507,6 @@ export default function ShopPage() {
                 <button onClick={resetPriceRange} className="text-[var(--brand-gray)] hover:text-white ml-1"><X size={10} /></button>
               </span>
             )}
-            <button
-              onClick={resetAllFilters}
-              className="flex items-center gap-1 border border-[#333] px-3 py-1 font-sans text-xs text-[var(--brand-gray)] hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
-            >
-              Clear all
-            </button>
           </div>
         )}
       </section>
