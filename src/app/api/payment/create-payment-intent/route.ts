@@ -129,7 +129,7 @@ export async function POST(request: Request) {
             orderId,
             userId: auth.sub,
           },
-          description: `1 Jamaica Music order ${orderId}`,
+          description: `1 in Jamaica Music order ${orderId}`,
         });
 
     await db.insert(orders).values({

@@ -121,7 +121,7 @@ export default function AuthPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Header */}
         <div className="text-center mb-8">
-          <span className="text-[var(--brand-yellow)] font-bebas tracking-widest text-lg">1 JAMAICA MUSIC</span>
+          <span className="text-[var(--brand-yellow)] font-bebas tracking-widest text-lg">1 IN JAMAICA MUSIC</span>
           <h1 className="text-white font-bebas text-6xl mt-1">
             {tab === "login" ? "WELCOME BACK" : "JOIN US"}
           </h1>

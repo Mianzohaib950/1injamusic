@@ -56,11 +56,25 @@ export async function ensureServerSchema() {
           bio text not null default '',
           image text not null default '',
           booking_email text not null default 'booking@1jamaicamusic.com',
+          spotify_url text not null default '',
           active boolean not null default true,
           sort_order integer not null default 0,
           created_at timestamp not null default now(),
           updated_at timestamp not null default now()
         );`,
+      );
+      await pool.query(
+        `alter table if exists artists add column if not exists spotify_url text not null default '';`,
+      );
+      await pool.query(
+        `update artists set spotify_url = case slug
+          when 'hintell' then 'https://open.spotify.com/artist/2G7DUmZWCTv4ZK5IFpDmSR'
+          when 'dark-koko' then 'https://open.spotify.com/artist/2Q8jomJYI8klJCSrjJjYeV'
+          when 'swazz' then 'https://open.spotify.com/artist/6Q4Y6RUlDPqRZajkgxUpQX'
+          when 'meesch' then 'https://open.spotify.com/artist/7rvQlYFF6XBz1wLRQG9iPA'
+          else spotify_url
+        end
+        where spotify_url = '' and slug in ('hintell', 'dark-koko', 'swazz', 'meesch');`,
       );
       await pool.query(
         `create table if not exists categories (
@@ -208,15 +222,15 @@ export async function ensureServerSchema() {
         `insert into cms_sections (id, page_id, section_key, section_type, title, subtitle, body, sort_order, active)
          values
           ('home-hero', 'home-page', 'hero', 'hero', 'WE COLLABORATE', 'WITH AMBITIOUS DJS AND PRODUCERS.', 'Booking world-renowned and rising music artists, DJs, and producers out of Jamaica.', 1, true),
-          ('home-marquee', 'home-page', 'marquee', 'marquee', '1 JAMAICA MUSIC', '', 'LET''S CREATE SOMETHING GREAT TOGETHER', 2, true),
+          ('home-marquee', 'home-page', 'marquee', 'marquee', '1 IN JAMAICA MUSIC', '', 'LET''S CREATE SOMETHING GREAT TOGETHER', 2, true),
           ('home-what-we-do', 'home-page', 'what_we_do', 'content', 'WHAT WE DO', '', 'WE COLLABORATE WITH AMBITIOUS DJS AND PRODUCERS. LET''S MAKE SOMETHING GREAT TOGETHER.', 3, true),
           ('home-artists-preview', 'home-page', 'artists_preview', 'list', 'OUR ARTISTS', '', '', 4, true),
           ('home-new-drops', 'home-page', 'new_drops', 'list', 'NEW DROPS', '', '', 5, true),
           ('home-featured-video', 'home-page', 'featured_video', 'video', 'LATEST VIDEO', '', '', 6, true),
           ('home-album-gallery', 'home-page', 'album_gallery', 'gallery', 'ALBUM ART', '', '', 7, true),
           ('home-community', 'home-page', 'community', 'gallery', 'COMMUNITY', '', '', 8, true),
-          ('home-collaborate', 'home-page', 'collaborate', 'content', 'WE COLLABORATE WITH NEW RISING DJs', '', 'Our team is always on the lookout for new rising producers and fresh artists to join the 1 Jamaica Music family.', 9, true),
-          ('home-footer', 'home-page', 'footer', 'footer', '1 JAMAICA MUSIC', '', '', 10, true)
+          ('home-collaborate', 'home-page', 'collaborate', 'content', 'WE COLLABORATE WITH NEW RISING DJs', '', 'Our team is always on the lookout for new rising producers and fresh artists to join the 1 in Jamaica Music family.', 9, true),
+          ('home-footer', 'home-page', 'footer', 'footer', '1 IN JAMAICA MUSIC', '', '', 10, true)
          on conflict (id) do nothing;`,
       );
       await pool.query(

@@ -7,6 +7,7 @@ export const artists = pgTable("artists", {
   bio: text("bio").notNull().default(""),
   image: text("image").notNull().default(""),
   bookingEmail: text("booking_email").notNull().default("booking@1jamaicamusic.com"),
+  spotifyUrl: text("spotify_url").notNull().default(""),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -110,7 +110,7 @@ export default function Loader({ onComplete }: LoaderProps) {
               color: "#F5F5F5",
             }}
           >
-            <span style={{ color: "#39FF14" }}>1</span> JAMAICA
+            <span style={{ color: "#39FF14" }}>1</span> IN JAMAICA
             <span
               style={{
                 display: "block",
@@ -199,7 +199,7 @@ export default function Loader({ onComplete }: LoaderProps) {
             gap: "0.4rem",
           }}
         >
-          {["1 JAMAICA MUSIC", "·", "1 JAMAICA MUSIC", "·", "EST. 2022"].map(
+          {["1 IN JAMAICA MUSIC", "·", "1 IN JAMAICA MUSIC", "·", "EST. 2022"].map(
             (word, i) => (
               <span
                 key={i}

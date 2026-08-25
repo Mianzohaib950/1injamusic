@@ -8,6 +8,10 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "image/gif": "gif",
   "image/svg+xml": "svg",
   "image/avif": "avif",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "video/ogg": "ogv",
+  "video/quicktime": "mov",
 };
 
 function parseDataUrl(value: string) {
@@ -76,6 +80,38 @@ export async function uploadImageIfNeeded(value: unknown, folder: string) {
       "x-upsert": "true",
     },
     body: buffer,
+  });
+
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text().catch(() => "");
+    throw new Error(`Supabase storage upload failed (${uploadResponse.status}): ${errorText || "unknown error"}`);
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/${bucket}/${encodedObjectPath(objectPath)}`;
+}
+
+export async function uploadMediaFile(file: File, folder: string) {
+  const supabaseUrl = String(process.env.SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  const bucket = String(process.env.SUPABASE_STORAGE_BUCKET ?? "").trim();
+  if (!supabaseUrl || !serviceRoleKey || !bucket) {
+    throw new Error("Supabase storage is not configured");
+  }
+
+  const extension = EXTENSION_BY_MIME[file.type] ?? file.name.split(".").pop()?.toLowerCase() ?? "bin";
+  const safeFolder = normalizeFolder(folder);
+  const objectPath = `${safeFolder}/${Date.now()}-${randomUUID()}.${extension}`;
+  const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${encodedObjectPath(objectPath)}`;
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": file.type || "application/octet-stream",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "x-upsert": "true",
+    },
+    body: Buffer.from(await file.arrayBuffer()),
   });
 
   if (!uploadResponse.ok) {

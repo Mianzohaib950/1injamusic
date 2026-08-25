@@ -466,6 +466,7 @@ function FileUrlField({
   fileName,
   onTextChange,
   onFileChange,
+  accept = "image/*",
 }: {
   label: string;
   caption: string;
@@ -473,6 +474,7 @@ function FileUrlField({
   fileName: string;
   onTextChange: (value: string) => void;
   onFileChange: (file?: File) => void;
+  accept?: string;
 }) {
   return (
     <FieldShell label={label} caption={caption}>
@@ -484,7 +486,7 @@ function FileUrlField({
         />
         <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
           {fileName || "Choose"}
-          <input className="hidden" type="file" accept="image/*" onChange={(e) => onFileChange(e.target.files?.[0])} />
+          <input className="hidden" type="file" accept={accept} onChange={(e) => onFileChange(e.target.files?.[0])} />
         </label>
       </div>
     </FieldShell>
@@ -978,7 +980,7 @@ function CategoriesPanel() {
 }
 
 function ArtistsPanel() {
-  const blank = { slug: "", name: "", genres: "", bio: "", image: "", bookingEmail: "booking@1jamaicamusic.com", active: true, sortOrder: 0 };
+  const blank = { slug: "", name: "", genres: "", bio: "", image: "", bookingEmail: "booking@1jamaicamusic.com", spotifyUrl: "", active: true, sortOrder: 0 };
   const artistFallback = getCachedPublicArtists() ?? artistProfiles;
   const { data, loading, error, updateData } = useAdminData<any[]>("/admin/artists", artistFallback);
   const [form, setForm] = useState<any>(blank);
@@ -1075,6 +1077,7 @@ function ArtistsPanel() {
             onFileChange={pickArtistImage}
           />
           <LabeledInput label="Booking Email" caption="Enter the email address used for artist booking requests." value={form.bookingEmail ?? ""} onChange={(e) => setForm({ ...form, bookingEmail: e.target.value })} />
+          <LabeledInput label="Spotify Artist URL" caption="Paste the official open.spotify.com/artist/... profile URL for the embedded player." value={form.spotifyUrl ?? ""} onChange={(e) => setForm({ ...form, spotifyUrl: e.target.value })} />
           <DropdownField label="Sort Order" caption="Choose the display priority for this artist." value={String(form.sortOrder ?? 0)} onChange={(value) => setForm({ ...form, sortOrder: Number(value) })}>
             {artistSortOrderOptions.map((sortOrder) => (
               <option key={sortOrder} value={sortOrder}>{sortOrder}</option>
@@ -1198,6 +1201,8 @@ function CmsPanel() {
   const [showSectionForm, setShowSectionForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
   const [sectionImageFileName, setSectionImageFileName] = useState("");
+  const [sectionVideoFileName, setSectionVideoFileName] = useState("");
+  const [uploadingSectionVideo, setUploadingSectionVideo] = useState(false);
   const [itemImageFileName, setItemImageFileName] = useState("");
   const [autoSectionKey, setAutoSectionKey] = useState(true);
   const pageEditFormRef = useRef<HTMLDivElement>(null);
@@ -1279,6 +1284,23 @@ function CmsPanel() {
     resetItemForm();
     setShowItemForm(false);
     setShowSectionForm(false);
+  };
+
+  const pickCmsVideo = async (file?: File) => {
+    if (!file) return;
+    setSectionVideoFileName(file.name);
+    setUploadingSectionVideo(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const result = await apiPost<{ url: string }>("/admin/uploads/video", formData);
+      setSectionForm((current) => ({ ...current, videoUrl: result.url }));
+    } catch (uploadError) {
+      setSectionVideoFileName("");
+      window.alert(uploadError instanceof Error ? uploadError.message : "Video upload failed");
+    } finally {
+      setUploadingSectionVideo(false);
+    }
   };
 
   const selectCmsPage = (pageKey: string) => {
@@ -1370,6 +1392,7 @@ function CmsPanel() {
       active: true,
     });
     setSectionImageFileName("");
+    setSectionVideoFileName("");
     setShowSectionForm(true);
   };
 
@@ -1389,6 +1412,7 @@ function CmsPanel() {
       active: true,
     });
     setSectionImageFileName("");
+    setSectionVideoFileName("");
     setShowSectionForm(false);
   };
 
@@ -1427,6 +1451,7 @@ function CmsPanel() {
       active: true,
     });
     setSectionImageFileName("");
+    setSectionVideoFileName("");
     setShowSectionForm(false);
     await reload();
   };
@@ -1640,7 +1665,18 @@ function CmsPanel() {
             }}
             onFileChange={(file) => pickCmsImage("section", file)}
           />
-          <LabeledInput label="Video URL" caption="Paste an optional video URL for video-based sections." value={sectionForm.videoUrl} onChange={(e) => setSectionForm({ ...sectionForm, videoUrl: e.target.value })} />
+          <FileUrlField
+            label="Video"
+            caption={uploadingSectionVideo ? "Uploading video to Supabase Storage..." : "Paste a YouTube/direct video URL or upload MP4, WebM, OGG, or MOV (max 100 MB)."}
+            value={sectionForm.videoUrl}
+            fileName={sectionVideoFileName}
+            accept="video/mp4,video/webm,video/ogg,video/quicktime"
+            onTextChange={(value) => {
+              setSectionVideoFileName("");
+              setSectionForm({ ...sectionForm, videoUrl: value });
+            }}
+            onFileChange={pickCmsVideo}
+          />
           <LabeledInput label="CTA Label" caption="Enter the button or link text for this section." value={sectionForm.ctaLabel} onChange={(e) => setSectionForm({ ...sectionForm, ctaLabel: e.target.value })} />
           <LabeledInput label="CTA URL" caption="Enter the destination URL for the call-to-action." value={sectionForm.ctaUrl} onChange={(e) => setSectionForm({ ...sectionForm, ctaUrl: e.target.value })} />
           <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
@@ -1682,6 +1718,7 @@ function CmsPanel() {
                 active: row.active ?? true,
               });
               setSectionImageFileName("");
+              setSectionVideoFileName("");
               setShowSectionForm(true);
               scrollToForm(sectionFormRef);
             }}>EDIT</button>

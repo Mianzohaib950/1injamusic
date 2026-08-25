@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
-import { ArrowRight, ShoppingBag } from "lucide-react";
+import { ArrowRight, ExternalLink, Music2, ShoppingBag } from "lucide-react";
 import gsap from "gsap";
-import { titleToSlug } from "@/data/releases";
 import { getProductsByArtist } from "@/data/merch";
 import type { MerchProduct } from "@/data/merch";
 import MerchCard from "@/components/MerchCard";
@@ -38,7 +37,7 @@ const LEGACY_ARTIST_CONTENT: Record<string, { bio: string; releases: string[]; i
     image: "/swazz.jpg",
   },
   "meesch": {
-    bio: "Mee$ch brings raw Hip-Hop and Trap energy with a Jamaican twist. A rising voice in the 1 Jamaica Music family.",
+    bio: "Mee$ch brings raw Hip-Hop and Trap energy with a Jamaican twist. A rising voice in the 1 in Jamaica Music family.",
     releases: ["Samurai", "Yes Please", "Bad Bitch"],
     image: "/meesch.jpg",
   },
@@ -60,13 +59,19 @@ function getFallbackArtist(slug: string) {
 
 type ArtistPageData = ArtistProfile & { releases: string[] };
 
+function getSpotifyArtistId(url?: string) {
+  return url?.match(/open\.spotify\.com\/artist\/([A-Za-z0-9]+)/)?.[1] ?? "";
+}
+
 function toArtistPageData(row: ArtistProfile, slug: string): ArtistPageData {
   const legacy = LEGACY_ARTIST_CONTENT[slug];
+  const bundled = artistProfiles.find((item) => item.slug === slug);
   return {
     ...row,
     name: row.name.toUpperCase(),
     bio: row.bio || legacy?.bio || "",
     image: row.image || legacy?.image || "",
+    spotifyUrl: row.spotifyUrl || bundled?.spotifyUrl || "",
     releases: legacy?.releases || [],
   };
 }
@@ -132,6 +137,8 @@ export default function ArtistPage() {
   if (!loading && !artistData) return <Navigate to="/not-found" />;
   if (!artistData) return null;
 
+  const spotifyArtistId = getSpotifyArtistId(artistData.spotifyUrl);
+
   return (
     <main className="w-full bg-[var(--brand-black)] min-h-screen">
       <section className="relative h-[80vh] w-full flex items-end pb-24 px-6 md:px-12 border-b border-[var(--brand-border)]">
@@ -159,7 +166,7 @@ export default function ArtistPage() {
         <div className="lg:col-span-1">
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest mb-6">ABOUT</span>
           <p className="text-[var(--brand-white)] font-sans text-lg leading-relaxed mb-8">
-            {artistData.bio || "This artist is part of the 1 Jamaica Music roster."}
+            {artistData.bio || "This artist is part of the 1 in Jamaica Music roster."}
           </p>
           <Link
             to="/booking"
@@ -170,24 +177,34 @@ export default function ArtistPage() {
         </div>
 
         <div className="lg:col-span-2">
-          <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest mb-6">DISCOGRAPHY</span>
-          {artistData.releases.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-              {artistData.releases.map((release, index) => (
-                <Link key={index} to={`/releases/${titleToSlug(release)}`} className="group" data-testid={`discography-card-${index}`}>
-                  <div className="aspect-square border border-[var(--brand-border)] group-hover:border-[var(--brand-yellow)] group-hover:shadow-[0_0_20px_rgba(232,255,0,0.15)] mb-4 overflow-hidden transition-all duration-300">
-                    <img
-                      src={`https://picsum.photos/seed/${release.replace(/\s+/g, "")}/400/400`}
-                      alt={release}
-                      className="w-full h-full object-cover brightness-50 group-hover:brightness-75 group-hover:scale-105 transition-all duration-500"
-                    />
-                  </div>
-                  <h4 className="text-white font-sans font-bold text-lg leading-tight group-hover:text-[var(--brand-yellow)] transition-colors">{release}</h4>
-                </Link>
-              ))}
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
+              <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">LISTEN ON SPOTIFY</span>
+              <p className="mt-1 text-sm text-[var(--brand-gray)]">Official songs and releases by {artistData.name}. Playback stays on this page.</p>
+            </div>
+            {spotifyArtistId && (
+              <a href={artistData.spotifyUrl} target="_blank" rel="noreferrer" className="hidden sm:inline-flex items-center gap-2 text-[var(--brand-yellow)] font-bebas tracking-widest hover:text-white">
+                OPEN SPOTIFY <ExternalLink size={15} />
+              </a>
+            )}
+          </div>
+          {spotifyArtistId ? (
+            <div className="overflow-hidden rounded-xl border border-[var(--brand-border)] bg-[#121212] shadow-[0_0_35px_rgba(30,215,96,0.08)]">
+              <iframe
+                title={`${artistData.name} on Spotify`}
+                src={`https://open.spotify.com/embed/artist/${spotifyArtistId}?utm_source=generator&theme=0`}
+                width="100%"
+                height="480"
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                loading="lazy"
+                className="block border-0"
+              />
             </div>
           ) : (
-            <p className="text-[var(--brand-gray)] font-sans">No releases listed yet.</p>
+            <div className="flex min-h-56 flex-col items-center justify-center border border-[var(--brand-border)] bg-[#101010] px-6 text-center">
+              <Music2 className="mb-4 text-[var(--brand-yellow)]" size={36} />
+              <p className="font-bebas text-2xl tracking-widest text-white">SPOTIFY PROFILE COMING SOON</p>
+            </div>
           )}
         </div>
       </div>

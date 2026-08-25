@@ -62,11 +62,14 @@ create table if not exists artists (
   bio text not null default '',
   image text not null default '',
   booking_email text not null default 'booking@1jamaicamusic.com',
+  spotify_url text not null default '',
   active boolean not null default true,
   sort_order integer not null default 0,
   created_at timestamp not null default now(),
   updated_at timestamp not null default now()
 );
+
+alter table if exists artists add column if not exists spotify_url text not null default '';
 
 create table if not exists categories (
   slug text primary key,
@@ -214,6 +217,15 @@ values
   ('poster', 'Poster', true, 5),
   ('bundle', 'Bundle', true, 6)
 on conflict (slug) do nothing;
+
+update artists set spotify_url = case slug
+  when 'hintell' then 'https://open.spotify.com/artist/2G7DUmZWCTv4ZK5IFpDmSR'
+  when 'dark-koko' then 'https://open.spotify.com/artist/2Q8jomJYI8klJCSrjJjYeV'
+  when 'swazz' then 'https://open.spotify.com/artist/6Q4Y6RUlDPqRZajkgxUpQX'
+  when 'meesch' then 'https://open.spotify.com/artist/7rvQlYFF6XBz1wLRQG9iPA'
+  else spotify_url
+end
+where spotify_url = '' and slug in ('hintell', 'dark-koko', 'swazz', 'meesch');
 create index if not exists cms_pages_page_key_idx on cms_pages (page_key);
 create index if not exists cms_sections_page_id_idx on cms_sections (page_id);
 create index if not exists cms_sections_sort_idx on cms_sections (page_id, sort_order);
@@ -232,19 +244,19 @@ on conflict (page_key) do nothing;
 insert into cms_sections (id, page_id, section_key, section_type, title, subtitle, body, sort_order, active)
 values
   ('home-hero', 'home-page', 'hero', 'hero', 'WE COLLABORATE', 'WITH AMBITIOUS DJS AND PRODUCERS.', 'Booking world-renowned and rising music artists, DJs, and producers out of Jamaica.', 1, true),
-  ('home-marquee', 'home-page', 'marquee', 'marquee', '1 JAMAICA MUSIC', '', 'LET''S CREATE SOMETHING GREAT TOGETHER', 2, true),
+  ('home-marquee', 'home-page', 'marquee', 'marquee', '1 IN JAMAICA MUSIC', '', 'LET''S CREATE SOMETHING GREAT TOGETHER', 2, true),
   ('home-what-we-do', 'home-page', 'what_we_do', 'content', 'WHAT WE DO', '', 'WE COLLABORATE WITH AMBITIOUS DJS AND PRODUCERS. LET''S MAKE SOMETHING GREAT TOGETHER.', 3, true),
   ('home-artists-preview', 'home-page', 'artists_preview', 'list', 'OUR ARTISTS', '', '', 4, true),
   ('home-new-drops', 'home-page', 'new_drops', 'list', 'NEW DROPS', '', '', 5, true),
   ('home-featured-video', 'home-page', 'featured_video', 'video', 'LATEST VIDEO', '', '', 6, true),
   ('home-album-gallery', 'home-page', 'album_gallery', 'gallery', 'ALBUM ART', '', '', 7, true),
   ('home-community', 'home-page', 'community', 'gallery', 'COMMUNITY', '', '', 8, true),
-  ('home-collaborate', 'home-page', 'collaborate', 'content', 'WE COLLABORATE WITH NEW RISING DJs', '', 'Our team is always on the lookout for new rising producers and fresh artists to join the 1 Jamaica Music family.', 9, true),
-  ('home-footer', 'home-page', 'footer', 'footer', '1 JAMAICA MUSIC', '', '', 10, true),
+  ('home-collaborate', 'home-page', 'collaborate', 'content', 'WE COLLABORATE WITH NEW RISING DJs', '', 'Our team is always on the lookout for new rising producers and fresh artists to join the 1 in Jamaica Music family.', 9, true),
+  ('home-footer', 'home-page', 'footer', 'footer', '1 IN JAMAICA MUSIC', '', '', 10, true),
   ('artists-hero', 'artists-page', 'hero', 'hero', 'OUR ARTISTS', '', 'Representing the sound of Jamaica to the world.', 1, true),
   ('artists-content', 'artists-page', 'content', 'content', 'OUR ARTISTS', '', 'Discover the full lineup.', 2, true),
   ('shop-hero', 'shop-page', 'hero', 'hero', 'OFFICIAL MERCH SHOP', '', 'Exclusive drops from Hintell, Dark Koko, Swazz and Mee$ch. Represent the movement.', 1, true),
-  ('shop-content', 'shop-page', 'content', 'content', 'NEW DROPS EVERY MONTH', '', 'Follow 1 Jamaica Music on Instagram for first access to limited drops and exclusive bundles.', 2, true),
+  ('shop-content', 'shop-page', 'content', 'content', 'NEW DROPS EVERY MONTH', '', 'Follow 1 in Jamaica Music on Instagram for first access to limited drops and exclusive bundles.', 2, true),
   ('events-hero', 'events-page', 'hero', 'hero', 'EVENTS & CONTACT', '', 'Book events and contact us.', 1, true),
   ('events-content', 'events-page', 'content', 'content', 'UPCOMING & PAST EVENTS', '', 'Share your event requirements.', 2, true),
   ('booking-hero', 'booking-page', 'hero', 'hero', 'BOOK AN ARTIST', '', 'From club nights to international festivals we make it happen.', 1, true),
@@ -349,7 +361,7 @@ on conflict (id) do update set
   sizes = excluded.sizes,
   in_stock = excluded.in_stock;
 
-insert into artists (slug, name, genres, bio, image, booking_email, active, sort_order)
+insert into artists (slug, name, genres, bio, image, booking_email, spotify_url, active, sort_order)
 values
   (
     'hintell',
@@ -358,6 +370,7 @@ values
     'Hintell is a versatile Jamaican artist known for blending Dancehall, Hip-Hop, and electronic sounds.',
     '/hintell.jpg',
     'booking@1jamaicamusic.com',
+    'https://open.spotify.com/artist/2G7DUmZWCTv4ZK5IFpDmSR',
     true,
     1
   ),
@@ -368,6 +381,7 @@ values
     'Dark Koko brings Afrobeats flair and Dancehall heat to every record.',
     '/dark-koko.jpg',
     'booking@1jamaicamusic.com',
+    'https://open.spotify.com/artist/2Q8jomJYI8klJCSrjJjYeV',
     true,
     2
   ),
@@ -378,6 +392,7 @@ values
     'Swazz is the high-energy Dancehall and Electronic crossover artist behind club-ready releases.',
     '/swazz.jpg',
     'booking@1jamaicamusic.com',
+    'https://open.spotify.com/artist/6Q4Y6RUlDPqRZajkgxUpQX',
     true,
     3
   ),
@@ -388,6 +403,7 @@ values
     'Mee$ch brings raw Hip-Hop and Trap energy with a Jamaican twist.',
     '/meesch.jpg',
     'booking@1jamaicamusic.com',
+    'https://open.spotify.com/artist/7rvQlYFF6XBz1wLRQG9iPA',
     true,
     4
   )

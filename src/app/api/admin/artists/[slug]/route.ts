@@ -46,6 +46,7 @@ export async function PUT(
       bio: body.bio,
       image: resolvedImage,
       bookingEmail: body.bookingEmail,
+      spotifyUrl: body.spotifyUrl,
       active: body.active == null ? undefined : Boolean(body.active),
       sortOrder: body.sortOrder == null ? undefined : Number(body.sortOrder),
       updatedAt: new Date(),

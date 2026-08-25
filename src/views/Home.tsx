@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowRight, ChevronDown, Play, Instagram, Twitter, Facebook, Youtube, Music } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, ChevronDown, Pause, Play, Instagram, Twitter, Facebook, Youtube, Music } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { titleToSlug } from "@/data/releases";
+import { normalizeBrandCopy } from "@/lib/brandCopy";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -21,6 +22,21 @@ const pickHeroLine = (candidate: unknown, fallback: string, maxWords = 4) => {
   if (!clean) return fallback;
   const words = clean.split(/\s+/).filter(Boolean);
   return words.length <= maxWords ? clean : fallback;
+};
+
+const getYouTubeVideoId = (value: string) => {
+  try {
+    const url = new URL(value);
+    if (url.hostname === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] ?? "";
+    if (url.hostname.endsWith("youtube.com")) {
+      if (url.pathname === "/watch") return url.searchParams.get("v") ?? "";
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (["embed", "shorts", "live"].includes(parts[0] ?? "")) return parts[1] ?? "";
+    }
+  } catch {
+    return "";
+  }
+  return "";
 };
 
 type CmsItem = {
@@ -55,8 +71,23 @@ type CmsSection = {
   items: CmsItem[];
 };
 
+type SpotifyRelease = {
+  id: string;
+  title: string;
+  artist: string;
+  artistSlug: string;
+  type: string;
+  releaseDate: string;
+  totalTracks: number;
+  image: string;
+  spotifyUrl: string;
+};
+
 export default function Home() {
+  const navigate = useNavigate();
   const heroRef = useRef<HTMLDivElement>(null);
+  const albumAudioRef = useRef<HTMLAudioElement>(null);
+  const featuredVideoRef = useRef<HTMLVideoElement>(null);
   const heroTextRef1 = useRef<HTMLHeadingElement>(null);
   const heroTextRef2 = useRef<HTMLHeadingElement>(null);
   const heroTextRef3 = useRef<HTMLHeadingElement>(null);
@@ -65,6 +96,21 @@ export default function Home() {
   const stat1Ref = useRef<HTMLSpanElement>(null);
   const stat2Ref = useRef<HTMLSpanElement>(null);
   const [cmsSections, setCmsSections] = useState<CmsSection[]>([]);
+  const [playingAlbum, setPlayingAlbum] = useState<string | null>(null);
+  const [spotifyReleases, setSpotifyReleases] = useState<SpotifyRelease[]>([]);
+  const [featuredVideoPlaying, setFeaturedVideoPlaying] = useState(false);
+
+  const toggleAlbum = (name: string) => {
+    const audio = albumAudioRef.current;
+    if (!audio) return;
+    if (playingAlbum === name && !audio.paused) {
+      audio.pause();
+      return;
+    }
+    if (playingAlbum !== name) audio.currentTime = 0;
+    setPlayingAlbum(name);
+    void audio.play().catch(() => setPlayingAlbum(null));
+  };
 
   useEffect(() => {
     let active = true;
@@ -84,6 +130,19 @@ export default function Home() {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/spotify/releases", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (active && Array.isArray(data?.releases)) setSpotifyReleases(data.releases);
+      })
+      .catch(() => {
+        // CMS artwork remains available until Spotify credentials are configured.
+      });
+    return () => { active = false; };
   }, []);
 
   const cmsMap = useMemo(() => {
@@ -251,7 +310,7 @@ export default function Home() {
   const heroCtaUrl = heroSection?.ctaUrl || "/artists";
   const heroImage = heroSection?.imageUrl || "/hero-banner.jpg";
 
-  const marqueeText = marqueeSection?.body || "1 JAMAICA MUSIC · LET'S CREATE SOMETHING GREAT TOGETHER · HINTELL · DARK KOKO · SWAZZ · MEE$CH ·";
+  const marqueeText = normalizeBrandCopy(marqueeSection?.body || "1 IN JAMAICA MUSIC · LET'S CREATE SOMETHING GREAT TOGETHER · HINTELL · DARK KOKO · SWAZZ · MEE$CH ·");
   const whatWeDoTitle = whatWeDoSection?.title || "WHAT WE DO";
   const whatWeDoBody = whatWeDoSection?.body || "WE COLLABORATE WITH AMBITIOUS DJS AND PRODUCERS. LET'S MAKE SOMETHING GREAT TOGETHER.";
   const whatWeDoSettings = (whatWeDoSection?.settings ?? {}) as Record<string, any>;
@@ -283,21 +342,48 @@ export default function Home() {
         image: item.imageUrl,
         linkUrl: item.linkUrl || `/releases/${titleToSlug(item.title)}`,
       }));
-  const newDrops = cmsNewDrops.length > 0
-    ? cmsNewDrops
-    : defaultNewDrops.map((drop) => ({ ...drop, linkUrl: `/releases/${titleToSlug(drop.title)}` }));
+  const newDrops = spotifyReleases.length > 0
+    ? spotifyReleases.slice(0, 8).map((release) => ({
+        title: release.title,
+        artist: release.artist,
+        genre: `${release.type.toUpperCase()} · ${release.totalTracks} TRACK${release.totalTracks === 1 ? "" : "S"}`,
+        image: release.image,
+        linkUrl: "",
+        spotifyRelease: release,
+      }))
+    : (cmsNewDrops.length > 0
+      ? cmsNewDrops.map((drop) => ({ ...drop, spotifyRelease: undefined }))
+      : defaultNewDrops.map((drop) => ({ ...drop, linkUrl: `/releases/${titleToSlug(drop.title)}`, spotifyRelease: undefined })));
 
   const albumItems = getActiveItems(albumGallerySection);
-  const albumsRow1 = albumItems.length > 0
-    ? albumItems.filter((item) => Number((item.meta ?? {}).row ?? 1) === 1).map((item) => ({ name: item.title, image: item.imageUrl }))
-    : defaultAlbumsRow1;
-  const albumsRow2 = albumItems.length > 0
-    ? albumItems.filter((item) => Number((item.meta ?? {}).row ?? 2) === 2).map((item) => ({ name: item.title, image: item.imageUrl }))
-    : defaultAlbumsRow2;
+  const spotifyAlbums = spotifyReleases.map((release) => ({ name: release.title, image: release.image, spotifyRelease: release }));
+  const albumsRow1 = spotifyAlbums.length > 0
+    ? spotifyAlbums.filter((_, index) => index % 2 === 0)
+    : albumItems.length > 0
+    ? albumItems.filter((item) => Number((item.meta ?? {}).row ?? 1) === 1).map((item) => ({ name: item.title, image: item.imageUrl, spotifyRelease: undefined }))
+    : defaultAlbumsRow1.map((album) => ({ ...album, spotifyRelease: undefined }));
+  const albumsRow2 = spotifyAlbums.length > 0
+    ? spotifyAlbums.filter((_, index) => index % 2 === 1)
+    : albumItems.length > 0
+    ? albumItems.filter((item) => Number((item.meta ?? {}).row ?? 2) === 2).map((item) => ({ name: item.title, image: item.imageUrl, spotifyRelease: undefined }))
+    : defaultAlbumsRow2.map((album) => ({ ...album, spotifyRelease: undefined }));
 
   const featuredVideoTitle = featuredVideoSection?.title || "LATEST VIDEO";
   const featuredVideoHeadline = featuredVideoSection?.body || "Swazz - Night Business (Official Video)";
   const featuredVideoUrl = featuredVideoSection?.videoUrl || "/latest-video.mp4";
+  const featuredYouTubeId = getYouTubeVideoId(featuredVideoUrl);
+  const featuredVideoPoster = featuredVideoSection?.imageUrl || (featuredYouTubeId ? `https://i.ytimg.com/vi/${featuredYouTubeId}/maxresdefault.jpg` : "");
+
+  useEffect(() => {
+    setFeaturedVideoPlaying(false);
+  }, [featuredVideoUrl]);
+
+  const playFeaturedVideo = () => {
+    setFeaturedVideoPlaying(true);
+    if (!featuredYouTubeId) {
+      window.setTimeout(() => void featuredVideoRef.current?.play().catch(() => undefined), 0);
+    }
+  };
 
   const communityItems = getActiveItems(communitySection);
   const communityImages = communityItems.length > 0
@@ -308,14 +394,14 @@ export default function Home() {
   const communityBody = communitySection?.body || "Follow us @swazz_music | @hintell_music | @darkkoko | @meesch";
 
   const collaborateTitle = collaborateSection?.title || "WE COLLABORATE WITH NEW RISING DJs";
-  const collaborateBody = collaborateSection?.body || "Our team is always on the lookout for new rising producers and fresh artists to join the 1 Jamaica Music family.";
+  const collaborateBody = normalizeBrandCopy(collaborateSection?.body || "Our team is always on the lookout for new rising producers and fresh artists to join the 1 in Jamaica Music family.");
   const collaborateImage = collaborateSection?.imageUrl || "/collab-section.jpg";
   const collaborateCtaUrl = collaborateSection?.ctaUrl || "/artists";
   const collaborateCtaLabel = collaborateSection?.ctaLabel || "READ MORE";
   const collaborateSettings = (collaborateSection?.settings ?? {}) as Record<string, any>;
   const collaborateEmail = String(collaborateSettings.email ?? "booking@1jamaicamusic.com");
 
-  const footerTitle = footerSection?.title || "1 JAMAICA MUSIC";
+  const footerTitle = normalizeBrandCopy(footerSection?.title || "1 IN JAMAICA MUSIC");
   const footerItems = getActiveItems(footerSection);
   const footerContactItems = footerItems.filter((item) => item.itemKey.startsWith("contact-"));
   const footerSocialItems = footerItems.filter((item) => item.itemKey.startsWith("social-"));
@@ -500,8 +586,8 @@ export default function Home() {
       <section className="scroll-section py-24 px-6 md:px-12 max-w-7xl mx-auto">
         <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest mb-12">{newDropsSection?.title || "NEW DROPS"}</span>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {newDrops.map((drop, i) => (
-            <Link key={i} to={drop.linkUrl} className="group" data-testid={`release-card-${i}`}>
+          {newDrops.map((drop, i) => {
+            const content = <>
               <div className="aspect-square overflow-hidden mb-4 border border-[var(--brand-border)] group-hover:border-[var(--brand-yellow)] group-hover:shadow-[0_0_20px_rgba(232,255,0,0.2)] transition-all duration-300">
                 <img 
                   src={drop.image}
@@ -513,8 +599,17 @@ export default function Home() {
               <h4 className="text-white font-sans font-bold text-lg leading-tight group-hover:text-[var(--brand-yellow)] transition-colors">{drop.title}</h4>
               <p className="text-[var(--brand-yellow)] font-bebas tracking-widest text-lg mt-1">{drop.artist}</p>
               <p className="text-[var(--brand-gray)] font-sans text-sm">{drop.genre}</p>
-            </Link>
-          ))}
+            </>;
+            return drop.spotifyRelease ? (
+              <Link key={drop.spotifyRelease.id} to={`/spotify-releases/${drop.spotifyRelease.id}`} className="group text-left" data-testid={`release-card-${i}`}>
+                {content}
+              </Link>
+            ) : (
+              <Link key={i} to={drop.linkUrl} className="group" data-testid={`release-card-${i}`}>
+                {content}
+              </Link>
+            );
+          })}
         </div>
       </section>
 
@@ -524,36 +619,53 @@ export default function Home() {
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{featuredVideoTitle}</span>
         </div>
         <div className="w-full aspect-[21/9] max-h-[80vh] relative group">
-          <video
-            src={featuredVideoUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:brightness-75 transition-all duration-500"
-          />
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <div className="w-24 h-24 rounded-full bg-[var(--brand-yellow)]/20 border-2 border-[var(--brand-yellow)] flex items-center justify-center mb-6">
-              <Play className="text-[var(--brand-yellow)] w-10 h-10 ml-2" />
-            </div>
-            <h2 className="text-white font-bebas text-4xl md:text-6xl text-center px-4 drop-shadow-xl">
-              {featuredVideoHeadline}
-            </h2>
-          </div>
+          {featuredYouTubeId && featuredVideoPlaying ? (
+            <iframe
+              src={`https://www.youtube.com/embed/${featuredYouTubeId}?autoplay=1&rel=0&modestbranding=1`}
+              title={featuredVideoHeadline}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              loading="lazy"
+              className="absolute inset-0 h-full w-full border-0"
+            />
+          ) : !featuredYouTubeId ? (
+            <video
+              ref={featuredVideoRef}
+              src={featuredVideoUrl}
+              poster={featuredVideoPoster || undefined}
+              controls={featuredVideoPlaying}
+              playsInline
+              preload="metadata"
+              className={`absolute inset-0 w-full h-full object-cover transition-[filter] duration-500 ${featuredVideoPlaying ? "brightness-100" : "brightness-50 group-hover:brightness-75"}`}
+            />
+          ) : (
+            <img src={featuredVideoPoster} alt={featuredVideoHeadline} className="absolute inset-0 h-full w-full object-cover brightness-50 transition-all duration-500 group-hover:brightness-75" />
+          )}
+          {!featuredVideoPlaying && (
+            <button type="button" onClick={playFeaturedVideo} className="absolute inset-0 flex w-full flex-col items-center justify-center bg-black/10" aria-label={`Play ${featuredVideoHeadline}`}>
+              <span className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[var(--brand-yellow)] bg-[var(--brand-yellow)]/20 transition-transform duration-300 hover:scale-110 hover:bg-[var(--brand-yellow)]/30">
+                <Play className="ml-2 h-10 w-10 text-[var(--brand-yellow)]" />
+              </span>
+              <span className="px-4 text-center font-bebas text-4xl text-white drop-shadow-xl md:text-6xl">
+                {featuredVideoHeadline}
+              </span>
+            </button>
+          )}
         </div>
       </section>
 
       {/* ALBUM ART GALLERY */}
       <section className="py-24 bg-[var(--brand-dark)] overflow-hidden">
+        <audio ref={albumAudioRef} src="/latest-video.mp4" preload="metadata" onPause={() => setPlayingAlbum(null)} onEnded={() => setPlayingAlbum(null)} />
         <div className="max-w-7xl mx-auto px-6 md:px-12 mb-12">
-          <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{albumGallerySection?.title || "ALBUM ART"}</span>
+          <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{albumGallerySection?.title || "LATEST ARTIST ALBUMS"}</span>
         </div>
         
         <div className="flex flex-col gap-4 group/container">
           {/* Row 1 — scrolling left */}
           <div className="flex whitespace-nowrap animate-ticker group-hover/container:[animation-play-state:paused]">
             {[...albumsRow1, ...albumsRow1].map((album, i) => (
-              <div key={`row1-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]">
+              <button type="button" onClick={() => album.spotifyRelease ? navigate(`/spotify-releases/${album.spotifyRelease.id}`) : toggleAlbum(album.name)} key={`row1-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
                 <img
                   src={album.image}
                   alt={album.name}
@@ -563,15 +675,15 @@ export default function Home() {
                   className="w-full h-full object-cover brightness-75 group-hover/item:brightness-100 transition-all duration-300"
                 />
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center p-4 text-center">
-                  <span className="text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{album.name}</span>
+                  <span className="flex flex-col items-center gap-2 text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{playingAlbum === album.name ? <Pause /> : <Play />} {album.name}</span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
           {/* Row 2 — scrolling right */}
           <div className="flex whitespace-nowrap animate-ticker-reverse group-hover/container:[animation-play-state:paused]">
             {[...albumsRow2, ...albumsRow2].map((album, i) => (
-              <div key={`row2-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]">
+              <button type="button" onClick={() => album.spotifyRelease ? navigate(`/spotify-releases/${album.spotifyRelease.id}`) : toggleAlbum(album.name)} key={`row2-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
                 <img
                   src={album.image}
                   alt={album.name}
@@ -581,13 +693,14 @@ export default function Home() {
                   className="w-full h-full object-cover brightness-75 group-hover/item:brightness-100 transition-all duration-300"
                 />
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center p-4 text-center">
-                  <span className="text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{album.name}</span>
+                  <span className="flex flex-col items-center gap-2 text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{playingAlbum === album.name ? <Pause /> : <Play />} {album.name}</span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
       </section>
+
 
       {/* COMMUNITY & COLLAB */}
       <section className="scroll-section py-24 px-6 md:px-12 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16">
@@ -737,7 +850,7 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-[var(--brand-border)] gap-4">
-            <p className="text-[var(--brand-gray)] font-sans text-sm">© 2026 - 1JamaicaMusic. All Rights Reserved. (Designed & Developed By Novatore Solutions)</p>
+            <p className="text-[var(--brand-gray)] font-sans text-sm">© 2026 - 1 in Jamaica Music. All Rights Reserved. (Designed & Developed By Novatore Solutions)</p>
           </div>
         </div>
       </footer>

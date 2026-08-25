@@ -18,6 +18,7 @@ function artistInput(body: any) {
     bio: body.bio ?? "",
     image: body.image ?? "",
     bookingEmail: body.bookingEmail ?? "booking@1jamaicamusic.com",
+    spotifyUrl: body.spotifyUrl ?? "",
     active: body.active == null ? true : Boolean(body.active),
     sortOrder: Number(body.sortOrder ?? 0),
   };

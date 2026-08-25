@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Play, SkipBack, SkipForward, ChevronRight } from "lucide-react";
+import { ArrowRight, Pause, Play, SkipBack, SkipForward, ChevronRight } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { motion } from "framer-motion";
 import { getReleaseBySlug, getReleasesByArtist } from "@/data/releases";
-import { toast } from "sonner";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -70,7 +69,11 @@ export default function ReleaseDetail() {
   const ctaTextRef = useRef<HTMLDivElement>(null);
   const ctaBtnRef = useRef<HTMLDivElement>(null);
 
-  const [openTrack] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [openTrack, setOpenTrack] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
@@ -80,6 +83,36 @@ export default function ReleaseDetail() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
+
+  const formatTime = (seconds: number) => {
+    if (!Number.isFinite(seconds)) return "00:00";
+    const minutes = Math.floor(seconds / 60);
+    return `${String(minutes).padStart(2, "0")}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+  };
+
+  const playTrack = (index: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (openTrack === index && isPlaying) {
+      audio.pause();
+      return;
+    }
+    if (openTrack !== index) {
+      setOpenTrack(index);
+      audio.currentTime = 0;
+    }
+    void audio.play().catch(() => setIsPlaying(false));
+  };
+
+  const changeTrack = (direction: number) => {
+    if (!release?.tracklist.length) return;
+    const next = (openTrack + direction + release.tracklist.length) % release.tracklist.length;
+    setOpenTrack(next);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      void audioRef.current.play().catch(() => setIsPlaying(false));
+    }
+  };
 
   useEffect(() => {
     if (!release) return;
@@ -218,30 +251,49 @@ export default function ReleaseDetail() {
               </div>
             </div>
 
-            {/* Mini Audio Player (visual only) */}
+            {/* In-site audio player */}
             <div className="bg-[var(--brand-card)] border border-[var(--brand-border)] rounded-lg p-5">
+              <audio
+                ref={audioRef}
+                src="/latest-video.mp4"
+                preload="metadata"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => changeTrack(1)}
+                onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+                onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+              />
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[var(--brand-white)] font-sans text-sm font-medium truncate max-w-[60%]">
                   {release.tracklist[openTrack]?.name}
                 </span>
-                <span className="text-[var(--brand-gray)] font-sans text-xs">00:00 / 03:29</span>
+                <span className="text-[var(--brand-gray)] font-sans text-xs">{formatTime(currentTime)} / {formatTime(duration)}</span>
               </div>
-              {/* Progress bar */}
-              <div className="relative h-1 bg-[var(--brand-border)] rounded-full mb-5">
-                <div className="absolute left-0 top-0 h-full w-[30%] bg-[var(--brand-yellow)] rounded-full" />
-                <div className="absolute top-1/2 left-[30%] -translate-y-1/2 w-3 h-3 bg-[var(--brand-yellow)] rounded-full -translate-x-1/2 shadow-[0_0_6px_rgba(232,255,0,0.8)]" />
-              </div>
+              <input
+                type="range"
+                min="0"
+                max={duration || 0}
+                value={Math.min(currentTime, duration || 0)}
+                onChange={(event) => {
+                  const time = Number(event.target.value);
+                  if (audioRef.current) audioRef.current.currentTime = time;
+                  setCurrentTime(time);
+                }}
+                aria-label="Track progress"
+                className="w-full accent-[var(--brand-yellow)] mb-5 cursor-pointer"
+              />
               <div className="flex items-center justify-center gap-8">
-                <button className="text-[var(--brand-yellow)] hover:opacity-70 transition-opacity" data-testid="player-prev">
+                <button onClick={() => changeTrack(-1)} className="text-[var(--brand-yellow)] hover:opacity-70 transition-opacity" data-testid="player-prev" aria-label="Previous track">
                   <SkipBack className="w-5 h-5" />
                 </button>
                 <button
+                  onClick={() => playTrack(openTrack)}
                   className="w-12 h-12 rounded-full border-2 border-[var(--brand-yellow)] flex items-center justify-center text-[var(--brand-yellow)] hover:bg-[var(--brand-yellow)] hover:text-black transition-colors"
                   data-testid="player-play"
                 >
-                  <Play className="w-5 h-5 ml-0.5" />
+                  {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
                 </button>
-                <button className="text-[var(--brand-yellow)] hover:opacity-70 transition-opacity" data-testid="player-next">
+                <button onClick={() => changeTrack(1)} className="text-[var(--brand-yellow)] hover:opacity-70 transition-opacity" data-testid="player-next" aria-label="Next track">
                   <SkipForward className="w-5 h-5" />
                 </button>
               </div>
@@ -309,24 +361,15 @@ export default function ReleaseDetail() {
                     {track.name}
                   </span>
                 </div>
-                {track.type === "buy" ? (
-                  <a
-                    href="#"
-                    onClick={e => e.preventDefault()}
-                    className="font-bebas text-[var(--brand-yellow)] text-sm tracking-widest border border-[var(--brand-yellow)] px-4 py-1.5 rounded-full hover:bg-[var(--brand-yellow)] hover:text-black transition-colors whitespace-nowrap"
-                    data-testid={`track-buy-${i}`}
-                  >
-                    BUY TRACK ↗
-                  </a>
-                ) : (
-                  <button
-                    onClick={() => toast("Redirecting to download...", { style: { background: "#161616", color: "#E8FF00", border: "1px solid #222" } })}
-                    className="font-bebas text-[#39FF14] text-sm tracking-widest border border-[#39FF14] px-4 py-1.5 rounded-full hover:bg-[#39FF14] hover:text-black transition-colors whitespace-nowrap"
-                    data-testid={`track-free-${i}`}
-                  >
-                    FREE DOWNLOAD ↓
-                  </button>
-                )}
+                <button
+                  onClick={() => playTrack(i)}
+                  className="inline-flex items-center gap-2 font-bebas text-[var(--brand-yellow)] text-sm tracking-widest border border-[var(--brand-yellow)] px-4 py-1.5 rounded-full hover:bg-[var(--brand-yellow)] hover:text-black transition-colors whitespace-nowrap"
+                  data-testid={`track-play-${i}`}
+                  aria-label={`${openTrack === i && isPlaying ? "Pause" : "Play"} ${track.name}`}
+                >
+                  {openTrack === i && isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  {openTrack === i && isPlaying ? "PAUSE TRACK" : "PLAY TRACK"}
+                </button>
               </div>
             ))}
           </div>

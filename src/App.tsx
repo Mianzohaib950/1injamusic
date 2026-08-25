@@ -20,6 +20,7 @@ import Home from "@/views/Home";
 import Artists from "@/views/Artists";
 import ArtistPage from "@/views/ArtistPage";
 import ReleaseDetail from "@/views/ReleaseDetail";
+import SpotifyReleasePage from "@/views/SpotifyReleasePage";
 import Events from "@/views/Events";
 import EventDetail from "@/views/EventDetail";
 import Booking from "@/views/Booking";
@@ -64,6 +65,7 @@ function App() {
                   <Route path="/artists" element={<Artists />} />
                   <Route path="/artists/:artist" element={<ArtistPage />} />
                   <Route path="/releases/:slug" element={<ReleaseDetail />} />
+                  <Route path="/spotify-releases/:id" element={<SpotifyReleasePage />} />
                   <Route path="/events" element={<Events />} />
                   <Route path="/events/:slug" element={<EventDetail />} />
                   <Route path="/booking" element={<Booking />} />

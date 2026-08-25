@@ -121,7 +121,7 @@ export default function Navigation() {
       >
         <div className="container mx-auto px-6 md:px-12 flex items-center justify-between">
           <Link to="/" className="flex items-center z-50">
-            <img src="/logo-1jamaica.png" alt="1 Jamaica Music" className="h-20 w-auto object-contain" />
+            <img src="/logo-1jamaica.png" alt="1 in Jamaica Music" className="h-20 w-auto object-contain" />
           </Link>
 
           <div className="hidden md:flex items-center gap-8">

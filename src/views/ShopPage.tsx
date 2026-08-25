@@ -11,6 +11,7 @@ import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
 import { apiGet } from "@/lib/api";
 import { getCachedProducts, loadProductsCatalog } from "@/lib/productCatalogClient";
+import { normalizeBrandCopy } from "@/lib/brandCopy";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -32,7 +33,7 @@ export default function ShopPage() {
   const [heroSubtitle, setHeroSubtitle] = useState("");
   const [heroImage, setHeroImage] = useState("");
   const [contentTitle, setContentTitle] = useState("NEW DROPS EVERY MONTH");
-  const [contentBody, setContentBody] = useState("Follow 1 Jamaica Music on Instagram for first access to limited drops and exclusive bundles.");
+  const [contentBody, setContentBody] = useState("Follow 1 in Jamaica Music on Instagram for first access to limited drops and exclusive bundles.");
   const [shopCategories, setShopCategories] = useState<string[]>(() => categories.map((category) => category.toUpperCase()));
   const gridRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
@@ -142,12 +143,12 @@ export default function ShopPage() {
         const sections = Array.isArray(data?.sections) ? data.sections : [];
         const hero = sections.find((section: any) => section.sectionKey === "hero");
         const content = sections.find((section: any) => section.sectionKey === "content");
-        setHeroTitle(String(hero?.title || "OFFICIAL\nMERCH SHOP"));
-        setHeroSubtitle(String(hero?.subtitle || ""));
-        setHeroBody(String(hero?.body || "Exclusive drops from Hintell, Dark Koko, Swazz & Mee$ch. Represent the movement."));
+        setHeroTitle(normalizeBrandCopy(hero?.title || "OFFICIAL\nMERCH SHOP"));
+        setHeroSubtitle(normalizeBrandCopy(hero?.subtitle || ""));
+        setHeroBody(normalizeBrandCopy(hero?.body || "Exclusive drops from Hintell, Dark Koko, Swazz & Mee$ch. Represent the movement."));
         setHeroImage(String(hero?.imageUrl || ""));
-        setContentTitle(String(content?.title || "NEW DROPS EVERY MONTH"));
-        setContentBody(String(content?.body || "Follow 1 Jamaica Music on Instagram for first access to limited drops and exclusive bundles."));
+        setContentTitle(normalizeBrandCopy(content?.title || "NEW DROPS EVERY MONTH"));
+        setContentBody(normalizeBrandCopy(content?.body || "Follow 1 in Jamaica Music on Instagram for first access to limited drops and exclusive bundles."));
       } catch {
         // Keep static fallback content.
       }
@@ -316,7 +317,7 @@ export default function ShopPage() {
 
         <div className="relative z-10 max-w-7xl mx-auto">
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-lg tracking-[0.3em] mb-4">
-            1 JAMAICA MUSIC
+            1 IN JAMAICA MUSIC
           </span>
           <h1 className="shop-hero-text text-white font-bebas text-7xl md:text-[9rem] leading-none mb-6">
             {heroLines.map((line, index) => (
