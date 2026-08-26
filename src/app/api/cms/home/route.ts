@@ -5,7 +5,9 @@ import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
 export const runtime = "nodejs";
-const PUBLIC_CACHE_HEADERS = { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=86400" };
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+const PUBLIC_CACHE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 
 export async function GET() {
   try {

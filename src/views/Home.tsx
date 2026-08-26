@@ -436,7 +436,7 @@ export default function Home() {
   const albumsRow2 = resolvedAlbumCatalog.filter((_, index) => index % 2 === 1);
 
   const featuredVideoTitle = featuredVideoSection?.title || "LATEST VIDEO";
-  const featuredVideoHeadline = featuredVideoSection?.body || "Swazz - Night Business (Official Video)";
+  const featuredVideoHeadline = featuredVideoSection?.subtitle || featuredVideoSection?.body || "Swazz - Night Business (Official Video)";
   const featuredVideoUrl = featuredVideoSection?.videoUrl || "/latest-video.mp4";
   const featuredYouTubeId = getYouTubeVideoId(featuredVideoUrl);
   const featuredVideoPoster = featuredVideoSection?.imageUrl || (featuredYouTubeId ? `https://i.ytimg.com/vi/${featuredYouTubeId}/maxresdefault.jpg` : "");
