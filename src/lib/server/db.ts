@@ -29,12 +29,20 @@ function shouldUseSsl(connectionString: string) {
 export function getPool() {
   if (!globalThis.__dbPool) {
     const connectionString = getConnectionString();
+    const configuredPoolMax = Number.parseInt(process.env.DB_POOL_MAX ?? "", 10);
+    // Vercel may run many isolated function instances. Keeping three clients
+    // per instance quickly exhausts Supabase's session-pool allowance, so use
+    // one connection per instance unless an operator explicitly overrides it.
+    const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
+      ? configuredPoolMax
+      : 1;
     globalThis.__dbPool = new Pool({
       connectionString,
-      max: 3,
+      max: poolMax,
       connectionTimeoutMillis: 10000,
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: 5000,
       keepAlive: true,
+      allowExitOnIdle: true,
       ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : undefined,
     });
   }
