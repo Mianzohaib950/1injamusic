@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { ArrowRight, ExternalLink, Music2, ShoppingBag } from "lucide-react";
 import gsap from "gsap";
-import { getProductsByArtist } from "@/data/merch";
+import { getProductsByArtist, merchProducts } from "@/data/merch";
 import type { MerchProduct } from "@/data/merch";
 import MerchCard from "@/components/MerchCard";
 import QuickAddModal from "@/components/QuickAddModal";
 import { apiGet } from "@/lib/api";
-import { artistProfiles, type ArtistProfile } from "@/data/artists";
+import { artistProfiles, getCanonicalSpotifyUrl, type ArtistProfile } from "@/data/artists";
 import { getCachedPublicArtists, upsertCachedPublicArtist } from "@/lib/publicArtistCache";
+import { getCachedProducts, loadProductsCatalog } from "@/lib/productCatalogClient";
 
 const ARTIST_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -71,7 +72,9 @@ function toArtistPageData(row: ArtistProfile, slug: string): ArtistPageData {
     name: row.name.toUpperCase(),
     bio: row.bio || legacy?.bio || "",
     image: row.image || legacy?.image || "",
-    spotifyUrl: row.spotifyUrl || bundled?.spotifyUrl || "",
+    // Prefer the verified official profile for built-in roster artists. This
+    // prevents a stale copied DB URL from rendering the same artist everywhere.
+    spotifyUrl: getCanonicalSpotifyUrl(slug, row.spotifyUrl || bundled?.spotifyUrl),
     releases: legacy?.releases || [],
   };
 }
@@ -82,6 +85,8 @@ export default function ArtistPage() {
   const [quickProduct, setQuickProduct] = useState<MerchProduct | null>(null);
   const [loading, setLoading] = useState(true);
   const [artistData, setArtistData] = useState<ArtistPageData | null>(null);
+  const [artistProducts, setArtistProducts] = useState<MerchProduct[]>([]);
+  const [showingArtistMerch, setShowingArtistMerch] = useState(false);
 
   useEffect(() => {
     const chars = heroRef.current?.querySelectorAll("span");
@@ -96,6 +101,13 @@ export default function ArtistPage() {
       });
     }
   }, [artistData?.slug]);
+
+  useEffect(() => {
+    if (!artistData || window.location.hash !== "#spotify-catalog") return;
+    window.requestAnimationFrame(() => {
+      document.getElementById("spotify-catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [artistData]);
 
   useEffect(() => {
     let active = true;
@@ -132,6 +144,26 @@ export default function ArtistPage() {
       window.clearTimeout(timeoutId);
     };
   }, [artist]);
+
+  useEffect(() => {
+    if (!artistData) return;
+    let active = true;
+    const matchesArtist = (product: MerchProduct) =>
+      String(product.artistSlug ?? "").trim().toLowerCase() === artistData.slug.trim().toLowerCase() ||
+      String(product.artist ?? "").trim().toLowerCase() === artistData.name.trim().toLowerCase();
+    const fallback = getProductsByArtist(artistData.slug);
+    const cachedProducts = getCachedProducts();
+    const showProducts = (products: MerchProduct[]) => {
+      const matched = products.filter(matchesArtist);
+      setShowingArtistMerch(matched.length > 0);
+      setArtistProducts(matched.length > 0 ? matched : products.slice(0, 4));
+    };
+    showProducts(cachedProducts ?? (fallback.length > 0 ? fallback : merchProducts));
+    loadProductsCatalog()
+      .then((products) => { if (active) showProducts(products.length > 0 ? products : merchProducts); })
+      .catch(() => { if (active && !cachedProducts) showProducts(fallback.length > 0 ? fallback : merchProducts); });
+    return () => { active = false; };
+  }, [artistData?.slug, artistData?.name]);
 
   if (!artist) return <Navigate to="/not-found" />;
   if (!loading && !artistData) return <Navigate to="/not-found" />;
@@ -176,7 +208,7 @@ export default function ArtistPage() {
           </Link>
         </div>
 
-        <div className="lg:col-span-2">
+        <div id="spotify-catalog" className="lg:col-span-2 scroll-mt-32">
           <div className="mb-6 flex items-end justify-between gap-4">
             <div>
               <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">LISTEN ON SPOTIFY</span>
@@ -210,7 +242,7 @@ export default function ArtistPage() {
       </div>
 
       {(() => {
-        const products = getProductsByArtist(artistData.slug);
+        const products = artistProducts;
         if (!products.length) return null;
         return (
           <section className="border-t border-[var(--brand-border)] py-24 px-6 md:px-12 bg-[#0D0D0D]">
@@ -220,7 +252,7 @@ export default function ArtistPage() {
                 <div>
                   <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest mb-2">OFFICIAL MERCH</span>
                   <h2 className="text-white font-bebas text-5xl md:text-6xl leading-none">
-                    {artistData.name} COLLECTION
+                    {showingArtistMerch ? `${artistData.name} COLLECTION` : "1 JAMAICA MUSIC COLLECTION"}
                   </h2>
                 </div>
                 <a

@@ -20,6 +20,7 @@ import { clearProductsCatalogCache } from "@/lib/productCatalogClient";
 import { getCachedPublicArtists, mergePublicArtists, removeCachedPublicArtist, upsertCachedPublicArtist } from "@/lib/publicArtistCache";
 import { merchProducts } from "@/data/merch";
 import { artistProfiles } from "@/data/artists";
+import { getSpotifyEmbed } from "@/lib/spotifyIds";
 
 type AdminSection =
   | "dashboard"
@@ -1117,6 +1118,7 @@ type CmsItem = {
   linkLabel: string;
   linkUrl: string;
   tags: string[];
+  meta: Record<string, unknown>;
   sortOrder: number;
   active: boolean;
 };
@@ -1205,6 +1207,7 @@ function CmsPanel() {
   const [uploadingSectionVideo, setUploadingSectionVideo] = useState(false);
   const [itemImageFileName, setItemImageFileName] = useState("");
   const [autoSectionKey, setAutoSectionKey] = useState(true);
+  const [spotifyRefreshStatus, setSpotifyRefreshStatus] = useState("");
   const pageEditFormRef = useRef<HTMLDivElement>(null);
   const sectionFormRef = useRef<HTMLDivElement>(null);
   const sectionItemsPanelRef = useRef<HTMLDivElement>(null);
@@ -1231,6 +1234,7 @@ function CmsPanel() {
     videoUrl: "",
     linkLabel: "",
     linkUrl: "",
+    spotifyAlbumUrl: "",
     tags: "",
     active: true,
   });
@@ -1467,6 +1471,7 @@ function CmsPanel() {
       videoUrl: "",
       linkLabel: "",
       linkUrl: "",
+      spotifyAlbumUrl: "",
       tags: "",
       active: true,
     });
@@ -1485,6 +1490,7 @@ function CmsPanel() {
       videoUrl: "",
       linkLabel: "",
       linkUrl: "",
+      spotifyAlbumUrl: "",
       tags: "",
       active: true,
     });
@@ -1509,6 +1515,14 @@ function CmsPanel() {
     const editingItem = currentItems.find((item) => item.id === editingItemId);
     const payload = {
       ...itemForm,
+      meta: {
+        ...(editingItem?.meta ?? {}),
+        spotifyAlbumUrl: itemForm.spotifyAlbumUrl.trim(),
+        spotifyAlbumId: getSpotifyEmbed(itemForm.spotifyAlbumUrl)?.type === "album" ? getSpotifyEmbed(itemForm.spotifyAlbumUrl)?.id ?? "" : "",
+        spotifyEmbedUrl: itemForm.spotifyAlbumUrl.trim(),
+        spotifyEmbedType: getSpotifyEmbed(itemForm.spotifyAlbumUrl)?.type ?? "",
+        spotifyEmbedId: getSpotifyEmbed(itemForm.spotifyAlbumUrl)?.id ?? "",
+      },
       tags: String(itemForm.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
       sortOrder: editingItem?.sortOrder ?? currentItems.length + 1,
     };
@@ -1525,6 +1539,7 @@ function CmsPanel() {
       videoUrl: "",
       linkLabel: "",
       linkUrl: "",
+      spotifyAlbumUrl: "",
       tags: "",
       active: true,
     });
@@ -1732,12 +1747,18 @@ function CmsPanel() {
         <div ref={sectionItemsPanelRef} className={`${panelClass} p-5 mt-6 scroll-mt-28`}>
           <h3 className="text-white font-bebas text-3xl mb-4">SECTION ITEMS ({capitalizeFirst(currentSection.sectionKey)})</h3>
           <div className="mb-6 flex items-center justify-end gap-3">
+            {currentSection.sectionKey === "new_drops" && <button className={ghostClass} onClick={async () => {
+              setSpotifyRefreshStatus("Refreshing Spotify…");
+              try { await apiPost("/spotify/releases", {}); setSpotifyRefreshStatus("Spotify catalog refreshed."); }
+              catch (error) { setSpotifyRefreshStatus(error instanceof Error ? error.message : "Spotify refresh failed."); }
+            }}>REFRESH SPOTIFY</button>}
             {!showItemForm ? (
               <button className={actionClass} onClick={startAddItem}><Save size={16} /> ADD ITEM</button>
             ) : (
               <button className={ghostClass} onClick={cancelItemForm}>CANCEL</button>
             )}
           </div>
+          {spotifyRefreshStatus && currentSection.sectionKey === "new_drops" && <p role="status" className="mb-4 text-sm text-[var(--brand-gray)]">{spotifyRefreshStatus}</p>}
           {showItemForm && (
             <div ref={itemFormRef} className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 scroll-mt-28">
                 <LabeledInput label="Item Key" caption="Internal item identifier within this section. Use lowercase letters, numbers, and hyphens or underscores." value={itemForm.itemKey} onChange={(e) => setItemForm({ ...itemForm, itemKey: e.target.value })} />
@@ -1757,6 +1778,7 @@ function CmsPanel() {
                 <LabeledInput label="Video URL" caption="Paste an optional video URL for this item." value={itemForm.videoUrl} onChange={(e) => setItemForm({ ...itemForm, videoUrl: e.target.value })} />
                 <LabeledInput label="Link Label" caption="Enter the text shown for this item's link." value={itemForm.linkLabel} onChange={(e) => setItemForm({ ...itemForm, linkLabel: e.target.value })} />
                 <LabeledInput label="Link URL" caption="Enter the destination URL for this item's link." value={itemForm.linkUrl} onChange={(e) => setItemForm({ ...itemForm, linkUrl: e.target.value })} />
+                <LabeledInput label="Spotify Album/Track URL or Embed" caption="Optional. Paste a Spotify album link, track link, or embed code to enable playback." value={itemForm.spotifyAlbumUrl} onChange={(e) => setItemForm({ ...itemForm, spotifyAlbumUrl: e.target.value })} />
                 <LabeledInput label="Tags" caption="Optional keywords for grouping or metadata. Separate each tag with a comma, for example featured,home." value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
                 <label className="flex items-center gap-2 text-[var(--brand-gray)] font-sans text-sm">
                   <input type="checkbox" checked={itemForm.active} onChange={(e) => setItemForm({ ...itemForm, active: e.target.checked })} />
@@ -1792,6 +1814,7 @@ function CmsPanel() {
                     videoUrl: row.videoUrl ?? "",
                     linkLabel: row.linkLabel ?? "",
                     linkUrl: row.linkUrl ?? "",
+                    spotifyAlbumUrl: String(row.meta?.spotifyAlbumUrl ?? row.meta?.spotifyAlbumId ?? ""),
                     tags: Array.isArray(row.tags) ? row.tags.join(",") : "",
                     active: row.active ?? true,
                   });

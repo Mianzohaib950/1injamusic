@@ -67,6 +67,14 @@ export async function ensureServerSchema() {
         `alter table if exists artists add column if not exists spotify_url text not null default '';`,
       );
       await pool.query(
+        `create table if not exists spotify_api_cache (
+          cache_key text primary key,
+          payload jsonb not null,
+          fetched_at timestamp not null default now(),
+          updated_at timestamp not null default now()
+        );`,
+      );
+      await pool.query(
         `update artists set spotify_url = case slug
           when 'hintell' then 'https://open.spotify.com/artist/2G7DUmZWCTv4ZK5IFpDmSR'
           when 'dark-koko' then 'https://open.spotify.com/artist/2Q8jomJYI8klJCSrjJjYeV'

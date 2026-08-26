@@ -5,6 +5,11 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { titleToSlug } from "@/data/releases";
 import { normalizeBrandCopy } from "@/lib/brandCopy";
+import { cacheSpotifyReleases, getCachedSpotifyReleases, type SpotifyRelease } from "@/lib/spotifyReleaseCache";
+import { getSpotifyEmbed } from "@/lib/spotifyIds";
+import { apiGet } from "@/lib/api";
+import { artistProfiles, type ArtistProfile } from "@/data/artists";
+import { getCachedPublicArtists, setCachedPublicArtists } from "@/lib/publicArtistCache";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -71,18 +76,6 @@ type CmsSection = {
   items: CmsItem[];
 };
 
-type SpotifyRelease = {
-  id: string;
-  title: string;
-  artist: string;
-  artistSlug: string;
-  type: string;
-  releaseDate: string;
-  totalTracks: number;
-  image: string;
-  spotifyUrl: string;
-};
-
 export default function Home() {
   const navigate = useNavigate();
   const heroRef = useRef<HTMLDivElement>(null);
@@ -96,8 +89,11 @@ export default function Home() {
   const stat1Ref = useRef<HTMLSpanElement>(null);
   const stat2Ref = useRef<HTMLSpanElement>(null);
   const [cmsSections, setCmsSections] = useState<CmsSection[]>([]);
+  const [publicArtists, setPublicArtists] = useState<ArtistProfile[]>(() => getCachedPublicArtists() ?? artistProfiles);
   const [playingAlbum, setPlayingAlbum] = useState<string | null>(null);
-  const [spotifyReleases, setSpotifyReleases] = useState<SpotifyRelease[]>([]);
+  const [spotifyReleases, setSpotifyReleases] = useState<SpotifyRelease[]>(getCachedSpotifyReleases);
+  const [spotifyLoading, setSpotifyLoading] = useState(() => getCachedSpotifyReleases().length === 0);
+  const [spotifyError, setSpotifyError] = useState("");
   const [featuredVideoPlaying, setFeaturedVideoPlaying] = useState(false);
 
   const toggleAlbum = (name: string) => {
@@ -134,15 +130,45 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/spotify/releases", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((data) => {
-        if (active && Array.isArray(data?.releases)) setSpotifyReleases(data.releases);
-      })
-      .catch(() => {
-        // CMS artwork remains available until Spotify credentials are configured.
-      });
+    apiGet<ArtistProfile[]>("/artists", { cache: "no-store" })
+      .then((rows) => { if (active && Array.isArray(rows)) setPublicArtists(setCachedPublicArtists(rows)); })
+      .catch(() => { /* Keep cached/bundled roster visible. */ });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadSpotifyReleases = () => {
+      setSpotifyError("");
+      fetch("/api/spotify/releases", { cache: "no-store" })
+        .then(async (response) => {
+          const data = await response.json().catch(() => null);
+          if (!response.ok) throw new Error(data?.error || "Spotify releases could not be loaded");
+          return data;
+        })
+        .then((data) => {
+          if (!active) return;
+          const releases = Array.isArray(data?.releases) ? data.releases : [];
+          const hasErrors = Array.isArray(data?.errors) && data.errors.length > 0;
+          if (data?.error) setSpotifyError(String(data.error));
+          if (releases.length > 0) {
+            setSpotifyReleases(releases);
+            cacheSpotifyReleases(releases);
+          } else if (spotifyReleases.length === 0) {
+            setSpotifyError(hasErrors ? "Spotify could not load the configured artist catalogs." : "No Spotify releases are available yet.");
+          }
+        })
+        .catch((error) => {
+          if (active) {
+            setSpotifyError(error instanceof Error ? error.message : "Spotify releases could not be loaded");
+          }
+        })
+        .finally(() => active && setSpotifyLoading(false));
+    };
+    loadSpotifyReleases();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const cmsMap = useMemo(() => {
@@ -248,14 +274,14 @@ export default function Home() {
   }, []);
 
   const defaultNewDrops = [
-    { title: "Party Time", artist: "Hintell", genre: "Dancehall", image: "/album-push-start.jpg" },
-    { title: "Die Once", artist: "Hintell", genre: "Hip-Hop", image: "/album-new-wave.jpg" },
-    { title: "Sunday Mix", artist: "Hintell", genre: "Techno/Peak Time", image: "/album-hot-hintell.jpg" },
-    { title: "Hypnotic Society", artist: "Hintell", genre: "Techno/Driving", image: "/album-inevitable.jpg" },
-    { title: "Club Shake", artist: "Swazz", genre: "Dancehall", image: "/album-night-business.jpg" },
-    { title: "Dubai ft. Stylo G", artist: "Swazz", genre: "Dancehall", image: "/album-dudus.jpg" },
-    { title: "Glocks and Mimosas", artist: "Dark Koko", genre: "Afrobeats", image: "/album-hangle.jpg" },
-    { title: "Portland Love ft. Dark Koko", artist: "Hintell", genre: "Dancehall", image: "/album-black-barbie.jpg" }
+    { title: "Push Start Accelerate", artist: "Hintell", artistSlug: "hintell", genre: "Release", image: "/album-push-start.jpg" },
+    { title: "New Wave", artist: "Hintell", artistSlug: "hintell", genre: "Release", image: "/album-new-wave.jpg" },
+    { title: "HOT — Hintell", artist: "Hintell", artistSlug: "hintell", genre: "Release", image: "/album-hot-hintell.jpg" },
+    { title: "Inevitable", artist: "Hintell", artistSlug: "hintell", genre: "Release", image: "/album-inevitable.jpg" },
+    { title: "Night Business", artist: "Swazz", artistSlug: "swazz", genre: "Release", image: "/album-night-business.jpg" },
+    { title: "Dudus", artist: "Swazz", artistSlug: "swazz", genre: "Release", image: "/album-dudus.jpg" },
+    { title: "Hangle", artist: "Dark Koko", artistSlug: "dark-koko", genre: "Release", image: "/album-hangle.jpg" },
+    { title: "Black Barbie", artist: "Dark Koko", artistSlug: "dark-koko", genre: "Release", image: "/album-black-barbie.jpg" }
   ];
 
   const defaultAlbumsRow1 = [
@@ -318,21 +344,24 @@ export default function Home() {
   const releasesCount = Number(whatWeDoSettings.releasesCount ?? 50);
 
   const artistsPreviewItems = getActiveItems(artistsPreviewSection);
-  const artistsPreview = artistsPreviewItems.length > 0
-    ? artistsPreviewItems.map((item) => ({
+  const configuredArtistPreviews = artistsPreviewItems.map((item) => ({
         slug: item.itemKey || titleToSlug(item.title || ""),
         name: item.title || item.itemKey || "ARTIST",
         image: item.imageUrl || "/hintell.jpg",
         badge: item.subtitle || "ROSTER",
         linkUrl: item.linkUrl || `/artists/${item.itemKey || titleToSlug(item.title || "")}`,
-      }))
-    : ['hintell', 'dark-koko', 'swazz', 'meesch'].map((slug) => ({
-        slug,
-        name: slug.replace('-', ' '),
-        image: slug === 'hintell' ? '/hintell.jpg' : slug === 'dark-koko' ? '/dark-koko.jpg' : slug === 'meesch' ? '/meesch-home.jpg' : '/swazz.jpg',
-        badge: "ROSTER",
-        linkUrl: `/artists/${slug}`,
       }));
+  const configuredArtistSlugs = new Set(configuredArtistPreviews.map((artist) => artist.slug));
+  const dynamicArtistPreviews = publicArtists.filter((artist) => artist.active !== false && !configuredArtistSlugs.has(artist.slug)).map((artist) => ({
+    slug: artist.slug,
+    name: artist.name,
+    image: artist.image,
+    badge: "ROSTER",
+    linkUrl: `/artists/${artist.slug}`,
+  }));
+  const artistsPreview = configuredArtistPreviews.length > 0
+    ? [...configuredArtistPreviews, ...dynamicArtistPreviews]
+    : publicArtists.filter((artist) => artist.active !== false).map((artist) => ({ slug: artist.slug, name: artist.name, image: artist.image, badge: "ROSTER", linkUrl: `/artists/${artist.slug}` }));
 
   const newDropItems = getActiveItems(newDropsSection);
   const cmsNewDrops = newDropItems.map((item) => ({
@@ -341,32 +370,59 @@ export default function Home() {
         genre: String((item.meta ?? {}).genre ?? item.description ?? ""),
         image: item.imageUrl,
         linkUrl: item.linkUrl || `/releases/${titleToSlug(item.title)}`,
+        spotifyEmbed: getSpotifyEmbed((item.meta ?? {}).spotifyEmbedUrl) || getSpotifyEmbed((item.meta ?? {}).spotifyAlbumUrl) || getSpotifyEmbed((item.meta ?? {}).spotifyAlbumId) || getSpotifyEmbed(item.linkUrl),
       }));
-  const newDrops = spotifyReleases.length > 0
-    ? spotifyReleases.slice(0, 8).map((release) => ({
+  const unlinkedCmsReleaseKeys = new Set(cmsNewDrops.filter((release) => !release.spotifyEmbed).map((release) => `${release.artist.toLowerCase()}:${release.title.toLowerCase()}`));
+  const visibleSpotifyReleases = spotifyReleases.filter((release) => !unlinkedCmsReleaseKeys.has(`${release.artist.toLowerCase()}:${release.title.toLowerCase()}`));
+  const spotifyNewDrops = visibleSpotifyReleases.slice(0, 8).map((release) => ({
         title: release.title,
         artist: release.artist,
-        genre: `${release.type.toUpperCase()} · ${release.totalTracks} TRACK${release.totalTracks === 1 ? "" : "S"}`,
+        genre: `${release.type.toUpperCase()} · ${release.releaseDate} · ${release.totalTracks} TRACK${release.totalTracks === 1 ? "" : "S"}`,
         image: release.image,
         linkUrl: "",
         spotifyRelease: release,
-      }))
-    : (cmsNewDrops.length > 0
-      ? cmsNewDrops.map((drop) => ({ ...drop, spotifyRelease: undefined }))
-      : defaultNewDrops.map((drop) => ({ ...drop, linkUrl: `/releases/${titleToSlug(drop.title)}`, spotifyRelease: undefined })));
+  }));
+  const cmsSourceDrops = cmsNewDrops.length > 0 ? cmsNewDrops : defaultNewDrops.map((release) => ({
+    ...release,
+    linkUrl: `/releases/${titleToSlug(release.title)}`,
+    spotifyEmbed: null,
+  }));
+  const cmsMappedDrops = cmsSourceDrops.map((release) => ({
+    ...release,
+    linkUrl: release.spotifyEmbed ? `/spotify-releases/${release.spotifyEmbed.id}?type=${release.spotifyEmbed.type}` : release.linkUrl,
+    spotifyRelease: release.spotifyEmbed ? {
+      id: release.spotifyEmbed.id,
+      title: release.title,
+      artist: release.artist,
+      artistSlug: titleToSlug(release.artist),
+      type: String((newDropItems.find((item) => item.title === release.title)?.meta ?? {}).albumType ?? "album"),
+      releaseDate: String((newDropItems.find((item) => item.title === release.title)?.meta ?? {}).releaseDate ?? ""),
+      totalTracks: Number((newDropItems.find((item) => item.title === release.title)?.meta ?? {}).totalTracks ?? 0),
+      image: release.image,
+      spotifyUrl: `https://open.spotify.com/${release.spotifyEmbed.type}/${release.spotifyEmbed.id}`,
+      spotifyEmbedType: release.spotifyEmbed.type,
+      spotifyEmbedId: release.spotifyEmbed.id,
+      videoUrl: String(newDropItems.find((item) => item.title === release.title)?.videoUrl ?? ""),
+      description: String(newDropItems.find((item) => item.title === release.title)?.description ?? ""),
+    } satisfies SpotifyRelease : undefined,
+  }));
+  const spotifyDropKeys = new Set(spotifyNewDrops.flatMap((drop) => [drop.spotifyRelease.id, `${drop.artist.toLowerCase()}:${drop.title.toLowerCase()}`]));
+  const newDrops = [
+    ...spotifyNewDrops,
+    ...cmsMappedDrops.filter((drop) => !spotifyDropKeys.has(drop.spotifyEmbed?.id ?? "") && !spotifyDropKeys.has(`${drop.artist.toLowerCase()}:${drop.title.toLowerCase()}`)),
+  ].slice(0, 8);
 
   const albumItems = getActiveItems(albumGallerySection);
-  const spotifyAlbums = spotifyReleases.map((release) => ({ name: release.title, image: release.image, spotifyRelease: release }));
-  const albumsRow1 = spotifyAlbums.length > 0
-    ? spotifyAlbums.filter((_, index) => index % 2 === 0)
-    : albumItems.length > 0
-    ? albumItems.filter((item) => Number((item.meta ?? {}).row ?? 1) === 1).map((item) => ({ name: item.title, image: item.imageUrl, spotifyRelease: undefined }))
-    : defaultAlbumsRow1.map((album) => ({ ...album, spotifyRelease: undefined }));
-  const albumsRow2 = spotifyAlbums.length > 0
-    ? spotifyAlbums.filter((_, index) => index % 2 === 1)
-    : albumItems.length > 0
-    ? albumItems.filter((item) => Number((item.meta ?? {}).row ?? 2) === 2).map((item) => ({ name: item.title, image: item.imageUrl, spotifyRelease: undefined }))
-    : defaultAlbumsRow2.map((album) => ({ ...album, spotifyRelease: undefined }));
+  const albumsFromNewDrops = newDrops.map((release) => ({ name: release.title, image: release.image, spotifyRelease: release.spotifyRelease, linkUrl: release.spotifyRelease ? `/spotify-releases/${release.spotifyRelease.id}` : release.linkUrl }));
+  const albumKeys = new Set(albumsFromNewDrops.map((album) => album.name.toLowerCase()));
+  const configuredAlbumItems = albumItems.filter((item) => !albumKeys.has(item.title.toLowerCase())).map((item) => {
+    const spotifyEmbed = getSpotifyEmbed((item.meta ?? {}).spotifyEmbedUrl) || getSpotifyEmbed((item.meta ?? {}).spotifyAlbumUrl) || getSpotifyEmbed((item.meta ?? {}).spotifyAlbumId) || getSpotifyEmbed(item.linkUrl);
+    return { name: item.title, image: item.imageUrl, spotifyRelease: undefined, linkUrl: spotifyEmbed ? `/spotify-releases/${spotifyEmbed.id}?type=${spotifyEmbed.type}` : item.linkUrl || `/releases/${titleToSlug(item.title)}` };
+  });
+  const albumCatalog = [...albumsFromNewDrops, ...configuredAlbumItems];
+  const resolvedAlbumCatalog = albumCatalog.length > 0 ? albumCatalog : [...defaultAlbumsRow1, ...defaultAlbumsRow2].map((album) => ({ ...album, spotifyRelease: undefined, linkUrl: `/releases/${titleToSlug(album.name)}` }));
+  const albumsRow1 = resolvedAlbumCatalog.filter((_, index) => index % 2 === 0);
+  const albumsRow2 = resolvedAlbumCatalog.filter((_, index) => index % 2 === 1);
 
   const featuredVideoTitle = featuredVideoSection?.title || "LATEST VIDEO";
   const featuredVideoHeadline = featuredVideoSection?.body || "Swazz - Night Business (Official Video)";
@@ -451,9 +507,13 @@ export default function Home() {
         className="relative h-screen w-full flex flex-col items-center justify-center pt-32 md:pt-36 overflow-hidden"
       >
         {/* Photo background */}
-        <div
-          className="absolute inset-0 z-0 bg-cover bg-center"
-          style={{ backgroundImage: `url('${heroImage}')`, backgroundPosition: "center 70%", opacity: 0.55, filter: "brightness(0.5) saturate(0.75)" }}
+        <img
+          src={heroImage}
+          alt=""
+          fetchPriority="high"
+          decoding="async"
+          className="absolute inset-0 z-0 h-full w-full object-cover opacity-55 brightness-50 saturate-75"
+          style={{ objectPosition: "center 70%" }}
         />
         {/* Dark gradient on top of photo */}
         <div className="absolute inset-0 z-0 bg-gradient-to-b from-black/45 via-transparent to-[var(--brand-black)]" />
@@ -585,23 +645,35 @@ export default function Home() {
       {/* NEW DROPS */}
       <section className="scroll-section py-24 px-6 md:px-12 max-w-7xl mx-auto">
         <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest mb-12">{newDropsSection?.title || "NEW DROPS"}</span>
+        {spotifyLoading && newDrops.length === 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6" aria-label="Loading Spotify releases">
+            {Array.from({ length: 8 }).map((_, index) => <div key={index} className="animate-pulse"><div className="aspect-square mb-4 bg-[var(--brand-card)] border border-[var(--brand-border)]" /><div className="h-5 bg-[var(--brand-card)] mb-3" /><div className="h-4 w-2/3 bg-[var(--brand-card)]" /></div>)}
+          </div>
+        )}
+        {!spotifyLoading && spotifyError && newDrops.length === 0 && (
+          <div role="status" className="border border-[var(--brand-border)] bg-[var(--brand-card)] px-6 py-8 text-[var(--brand-gray)]">
+            <p className="font-bebas text-xl tracking-widest text-white">SPOTIFY RELEASES UNAVAILABLE</p>
+            <p className="mt-2 font-sans text-sm">{spotifyError} Please try again shortly.</p>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {newDrops.map((drop, i) => {
+            const spotifyRelease = drop.spotifyRelease;
             const content = <>
               <div className="aspect-square overflow-hidden mb-4 border border-[var(--brand-border)] group-hover:border-[var(--brand-yellow)] group-hover:shadow-[0_0_20px_rgba(232,255,0,0.2)] transition-all duration-300">
                 <img 
                   src={drop.image}
                   alt={drop.title}
                   loading="lazy"
-                  className="w-full h-full object-cover brightness-75 group-hover:brightness-100 group-hover:scale-105 transition-all duration-500"
+                  className="w-full h-full object-cover"
                 />
               </div>
               <h4 className="text-white font-sans font-bold text-lg leading-tight group-hover:text-[var(--brand-yellow)] transition-colors">{drop.title}</h4>
               <p className="text-[var(--brand-yellow)] font-bebas tracking-widest text-lg mt-1">{drop.artist}</p>
               <p className="text-[var(--brand-gray)] font-sans text-sm">{drop.genre}</p>
             </>;
-            return drop.spotifyRelease ? (
-              <Link key={drop.spotifyRelease.id} to={`/spotify-releases/${drop.spotifyRelease.id}`} className="group text-left" data-testid={`release-card-${i}`}>
+            return spotifyRelease ? (
+              <Link key={spotifyRelease.id} to={`/spotify-releases/${spotifyRelease.id}`} onClick={() => cacheSpotifyReleases([spotifyRelease])} className="group text-left" data-testid={`release-card-${i}`}>
                 {content}
               </Link>
             ) : (
@@ -665,7 +737,7 @@ export default function Home() {
           {/* Row 1 — scrolling left */}
           <div className="flex whitespace-nowrap animate-ticker group-hover/container:[animation-play-state:paused]">
             {[...albumsRow1, ...albumsRow1].map((album, i) => (
-              <button type="button" onClick={() => album.spotifyRelease ? navigate(`/spotify-releases/${album.spotifyRelease.id}`) : toggleAlbum(album.name)} key={`row1-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
+              <button type="button" onClick={() => { if (album.spotifyRelease) cacheSpotifyReleases([album.spotifyRelease]); navigate(album.linkUrl); }} key={`row1-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
                 <img
                   src={album.image}
                   alt={album.name}
@@ -683,7 +755,7 @@ export default function Home() {
           {/* Row 2 — scrolling right */}
           <div className="flex whitespace-nowrap animate-ticker-reverse group-hover/container:[animation-play-state:paused]">
             {[...albumsRow2, ...albumsRow2].map((album, i) => (
-              <button type="button" onClick={() => album.spotifyRelease ? navigate(`/spotify-releases/${album.spotifyRelease.id}`) : toggleAlbum(album.name)} key={`row2-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
+              <button type="button" onClick={() => { if (album.spotifyRelease) cacheSpotifyReleases([album.spotifyRelease]); navigate(album.linkUrl); }} key={`row2-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
                 <img
                   src={album.image}
                   alt={album.name}

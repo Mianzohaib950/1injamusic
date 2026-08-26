@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,7 +14,6 @@ import GrainOverlay from "@/components/GrainOverlay";
 import Navigation from "@/components/Navigation";
 import CartDrawer from "@/components/CartDrawer";
 import WishlistDrawer from "@/components/WishlistDrawer";
-import Loader from "@/components/Loader";
 
 import Home from "@/views/Home";
 import Artists from "@/views/Artists";
@@ -38,9 +37,6 @@ import { loadProductsCatalog } from "@/lib/productCatalogClient";
 const queryClient = new QueryClient();
 
 function App() {
-  const [loaded, setLoaded] = useState(false);
-  const handleLoaderComplete = useCallback(() => setLoaded(true), []);
-
   useEffect(() => {
     loadProductsCatalog().catch(() => {
       // Prefetch is best-effort.
@@ -52,7 +48,6 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <CartProvider>
-            <Loader onComplete={handleLoaderComplete} />
             <BrowserRouter>
               <CustomCursor />
               <GrainOverlay />

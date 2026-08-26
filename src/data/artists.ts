@@ -56,3 +56,7 @@ export const artistProfiles: ArtistProfile[] = [
     sortOrder: 4,
   },
 ];
+
+export function getCanonicalSpotifyUrl(slug: string, spotifyUrl?: string) {
+  return artistProfiles.find((artist) => artist.slug === slug)?.spotifyUrl || spotifyUrl || "";
+}

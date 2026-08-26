@@ -71,6 +71,13 @@ create table if not exists artists (
 
 alter table if exists artists add column if not exists spotify_url text not null default '';
 
+create table if not exists spotify_api_cache (
+  cache_key text primary key,
+  payload jsonb not null,
+  fetched_at timestamp not null default now(),
+  updated_at timestamp not null default now()
+);
+
 create table if not exists categories (
   slug text primary key,
   name text not null,
@@ -225,7 +232,7 @@ update artists set spotify_url = case slug
   when 'meesch' then 'https://open.spotify.com/artist/7rvQlYFF6XBz1wLRQG9iPA'
   else spotify_url
 end
-where spotify_url = '' and slug in ('hintell', 'dark-koko', 'swazz', 'meesch');
+where slug in ('hintell', 'dark-koko', 'swazz', 'meesch');
 create index if not exists cms_pages_page_key_idx on cms_pages (page_key);
 create index if not exists cms_sections_page_id_idx on cms_sections (page_id);
 create index if not exists cms_sections_sort_idx on cms_sections (page_id, sort_order);

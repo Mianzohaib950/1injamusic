@@ -1,7 +1,7 @@
 import { getDb, artists } from "./db";
 import { artistProfiles } from "@/data/artists";
 import { ensureServerSchema } from "./schemaSync";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 export async function seedArtists() {
   await ensureServerSchema();
@@ -16,6 +16,14 @@ export async function seedArtists() {
   const missingDefaults = artistProfiles.filter((artist) => !existingSlugs.has(artist.slug));
   if (missingDefaults.length > 0) {
     await db.insert(artists).values(missingDefaults);
+  }
+
+  // Repair older databases where one Spotify URL was copied to several artists.
+  for (const artist of artistProfiles) {
+    await db
+      .update(artists)
+      .set({ spotifyUrl: artist.spotifyUrl ?? "", updatedAt: new Date() })
+      .where(eq(artists.slug, artist.slug));
   }
 
   await db

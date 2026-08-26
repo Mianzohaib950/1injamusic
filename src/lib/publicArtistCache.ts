@@ -1,5 +1,5 @@
 import type { ArtistProfile } from "@/data/artists";
-import { artistProfiles } from "@/data/artists";
+import { artistProfiles, getCanonicalSpotifyUrl } from "@/data/artists";
 
 const PUBLIC_ARTISTS_CACHE_KEY = "1jm_public_artists_cache";
 
@@ -14,7 +14,10 @@ export function mergePublicArtists(rows: ArtistProfile[]) {
       bySlug.delete(artist.slug);
       return;
     }
-    bySlug.set(artist.slug, artist);
+    bySlug.set(artist.slug, {
+      ...artist,
+      spotifyUrl: getCanonicalSpotifyUrl(artist.slug, artist.spotifyUrl),
+    });
   });
 
   return Array.from(bySlug.values()).sort(
