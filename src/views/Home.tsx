@@ -368,10 +368,15 @@ export default function Home() {
         title: item.title,
         artist: item.subtitle || String((item.meta ?? {}).artist ?? ""),
         genre: String((item.meta ?? {}).genre ?? item.description ?? ""),
-        image: item.imageUrl,
+        image: item.imageUrl || defaultNewDrops.find((release) => titleToSlug(release.title) === titleToSlug(item.title))?.image || "/album-push-start.jpg",
         linkUrl: item.linkUrl || `/releases/${titleToSlug(item.title)}`,
         spotifyEmbed: getSpotifyEmbed((item.meta ?? {}).spotifyEmbedUrl) || getSpotifyEmbed((item.meta ?? {}).spotifyAlbumUrl) || getSpotifyEmbed((item.meta ?? {}).spotifyAlbumId) || getSpotifyEmbed(item.linkUrl),
       }));
+  const releaseMatchKey = (artist: string, title: string) =>
+    `${artist.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}:${title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+  const spotifyReleaseByName = new Map(
+    spotifyReleases.map((release) => [releaseMatchKey(release.artist, release.title), release]),
+  );
   const unlinkedCmsReleaseKeys = new Set(cmsNewDrops.filter((release) => !release.spotifyEmbed).map((release) => `${release.artist.toLowerCase()}:${release.title.toLowerCase()}`));
   const visibleSpotifyReleases = spotifyReleases.filter((release) => !unlinkedCmsReleaseKeys.has(`${release.artist.toLowerCase()}:${release.title.toLowerCase()}`));
   const spotifyNewDrops = visibleSpotifyReleases.slice(0, 8).map((release) => ({
@@ -389,8 +394,9 @@ export default function Home() {
   }));
   const cmsMappedDrops = cmsSourceDrops.map((release) => ({
     ...release,
-    linkUrl: release.spotifyEmbed ? `/spotify-releases/${release.spotifyEmbed.id}?type=${release.spotifyEmbed.type}` : release.linkUrl,
-    spotifyRelease: release.spotifyEmbed ? {
+    ...(() => {
+      const matchedSpotifyRelease = spotifyReleaseByName.get(releaseMatchKey(release.artist, release.title));
+      const spotifyRelease = release.spotifyEmbed ? {
       id: release.spotifyEmbed.id,
       title: release.title,
       artist: release.artist,
@@ -404,7 +410,12 @@ export default function Home() {
       spotifyEmbedId: release.spotifyEmbed.id,
       videoUrl: String(newDropItems.find((item) => item.title === release.title)?.videoUrl ?? ""),
       description: String(newDropItems.find((item) => item.title === release.title)?.description ?? ""),
-    } satisfies SpotifyRelease : undefined,
+      } satisfies SpotifyRelease : matchedSpotifyRelease;
+      return {
+        linkUrl: spotifyRelease ? `/spotify-releases/${spotifyRelease.id}${release.spotifyEmbed ? `?type=${release.spotifyEmbed.type}` : ""}` : release.linkUrl,
+        spotifyRelease,
+      };
+    })(),
   }));
   const spotifyDropKeys = new Set(spotifyNewDrops.flatMap((drop) => [drop.spotifyRelease.id, `${drop.artist.toLowerCase()}:${drop.title.toLowerCase()}`]));
   const newDrops = [
