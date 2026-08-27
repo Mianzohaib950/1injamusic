@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb, artists } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
-import { apiError, json, noContent, readJson, serverError } from "@/lib/server/http";
+import { apiError, json, readJson, serverError } from "@/lib/server/http";
 import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { uploadImageIfNeeded } from "@/lib/server/supabaseStorage";
 import { withDatabaseRetry } from "@/lib/server/dbRetry";
@@ -74,11 +74,16 @@ export async function DELETE(
     if (auth instanceof Response) return auth;
 
     const { slug } = await context.params;
-    await withDatabaseRetry(async () => {
+    const deleted = await withDatabaseRetry(async () => {
       await ensureServerSchema();
-      await getDb().delete(artists).where(eq(artists.slug, slug));
+      return getDb()
+        .update(artists)
+        .set({ active: false, updatedAt: new Date() })
+        .where(eq(artists.slug, slug))
+        .returning({ slug: artists.slug });
     });
-    return noContent();
+    if (deleted.length === 0) return apiError("Artist not found", 404);
+    return json({ success: true });
   } catch (error) {
     return serverError(error);
   }

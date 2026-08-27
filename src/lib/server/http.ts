@@ -26,12 +26,28 @@ export function serverError(error: unknown) {
     return apiError("Database authentication failed. Check DATABASE_URL.", 503);
   }
 
+  if (code === "23505") {
+    return apiError("A record with the same name or identifier already exists.", 409);
+  }
+
+  if (code === "23503") {
+    return apiError("This record is still used by other content and cannot be deleted.", 409);
+  }
+
+  if (code === "23502") {
+    return apiError("A required field is missing. Please complete the form and try again.", 400);
+  }
+
   if (isRecoverableDatabaseError(error)) {
     return apiError("Database is unavailable. Check DATABASE_URL and network access.", 503);
   }
 
   if (message.includes("DATABASE_URL")) {
     return apiError("Database is not configured. Check DATABASE_URL.", 503);
+  }
+
+  if (/Failed query:|insert into|update .* set|delete from/i.test(message)) {
+    return apiError("The database could not save this change. Please check the form and try again.", 500);
   }
 
   return apiError(message || "Internal server error", 500);

@@ -1,4 +1,4 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { getDb, artists } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
 import { seedArtists } from "@/lib/server/artistSeed";
@@ -56,10 +56,19 @@ export async function POST(request: Request) {
       image: await uploadImageIfNeeded(item.image, "artists/profile"),
     };
 
-    await withDatabaseRetry(async () => {
+    const result = await withDatabaseRetry(async () => {
       await ensureServerSchema();
-      await getDb().insert(artists).values(resolvedItem);
+      const db = getDb();
+      const [existing] = await db.select({ active: artists.active }).from(artists).where(eq(artists.slug, item.slug));
+      if (existing?.active) return "exists" as const;
+      if (existing) {
+        await db.update(artists).set({ ...resolvedItem, updatedAt: new Date() }).where(eq(artists.slug, item.slug));
+        return "restored" as const;
+      }
+      await db.insert(artists).values(resolvedItem);
+      return "created" as const;
     });
+    if (result === "exists") return apiError("An artist with this slug already exists. Use a different name or edit the existing artist.", 409);
     return json(resolvedItem, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError(error);

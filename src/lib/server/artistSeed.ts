@@ -26,8 +26,4 @@ export async function seedArtists() {
       .where(eq(artists.slug, artist.slug));
   }
 
-  await db
-    .update(artists)
-    .set({ active: true, updatedAt: new Date() })
-    .where(inArray(artists.slug, defaultSlugs));
 }

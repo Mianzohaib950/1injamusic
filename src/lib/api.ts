@@ -7,7 +7,14 @@ export interface ApiErrorResponse {
 
 async function parseResponse(response: Response) {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: any = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: response.ok ? "The server returned an invalid response." : "The server could not complete this request." };
+    }
+  }
   if (!response.ok) {
     const message = (data && (data.error || data.message || JSON.stringify(data))) || response.statusText;
     const error = new Error(message);

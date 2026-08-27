@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import {
   BarChart3,
   CalendarCheck,
@@ -63,6 +64,17 @@ const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
 const MEMORY_ONLY_CACHE_PREFIXES: string[] = [];
+
+async function performAdminAction(action: () => Promise<unknown>, successMessage: string) {
+  try {
+    await action();
+    toast.success(successMessage);
+    return true;
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Unable to complete this action.");
+    return false;
+  }
+}
 const dashboardFallback = {
   totals: {
     users: 0,
@@ -708,8 +720,11 @@ function ProductsPanel() {
       originalPrice: form.originalPrice === "" ? null : Number(form.originalPrice),
       sizes: String(form.sizes).split(",").map((size) => size.trim()).filter(Boolean),
     };
-    if (editingId) await apiPut(`/admin/products/${editingId}`, payload);
-    else await apiPost("/admin/products", payload);
+    const saved = await performAdminAction(
+      () => editingId ? apiPut(`/admin/products/${editingId}`, payload) : apiPost("/admin/products", payload),
+      editingId ? "Product updated successfully." : "Product added successfully.",
+    );
+    if (!saved) return;
     clearProductsCatalogCache();
     setForm(blank);
     setImageFileName("");
@@ -832,7 +847,12 @@ function ProductsPanel() {
         actions={(row) => (
           <>
             <button className={ghostClass} onClick={() => { setEditingId(row.id); setForm({ ...row, imageHover: row.image ?? row.imageHover ?? "", sizes: (row.sizes ?? []).join(","), originalPrice: row.originalPrice ?? "" }); setImageFileName(""); setAutoProductSlug(false); setAutoProductBadge(false); setShowForm(true); scrollToForm(productFormRef); }}>EDIT</button>
-            <button className={ghostClass} onClick={async () => { await apiDelete(`/admin/products/${row.id}`); clearProductsCatalogCache(); await reload(); }}><Trash2 size={14} /></button>
+            <button className={ghostClass} onClick={async () => {
+              const deleted = await performAdminAction(() => apiDelete(`/admin/products/${row.id}`), "Product deleted successfully.");
+              if (!deleted) return;
+              clearProductsCatalogCache();
+              await reload();
+            }}><Trash2 size={14} /></button>
           </>
         )}
       />
@@ -860,8 +880,11 @@ function CategoriesPanel() {
       slug: toUrlSlug(form.slug || form.name),
       sortOrder: Number(form.sortOrder ?? 0),
     };
-    if (editingSlug) await apiPut(`/admin/categories/${editingSlug}`, payload);
-    else await apiPost("/admin/categories", payload);
+    const saved = await performAdminAction(
+      () => editingSlug ? apiPut(`/admin/categories/${editingSlug}`, payload) : apiPost("/admin/categories", payload),
+      editingSlug ? "Category updated successfully." : "Category added successfully.",
+    );
+    if (!saved) return;
     clearProductsCatalogCache();
     setForm(blank);
     setEditingSlug("");
@@ -966,7 +989,8 @@ function CategoriesPanel() {
             <button
               className={ghostClass}
               onClick={async () => {
-                await apiDelete(`/admin/categories/${row.slug}`);
+                const deleted = await performAdminAction(() => apiDelete(`/admin/categories/${row.slug}`), "Category deleted successfully.");
+                if (!deleted) return;
                 clearProductsCatalogCache();
                 await reload();
               }}
@@ -983,17 +1007,21 @@ function CategoriesPanel() {
 function ArtistsPanel() {
   const blank = { slug: "", name: "", genres: "", bio: "", image: "", bookingEmail: "booking@1jamaicamusic.com", spotifyUrl: "", active: true, sortOrder: 0 };
   const artistFallback = getCachedPublicArtists() ?? artistProfiles;
-  const { data, loading, error, updateData } = useAdminData<any[]>("/admin/artists", artistFallback);
+  const { data, loading, error, reload, updateData } = useAdminData<any[]>("/admin/artists", artistFallback);
   const [form, setForm] = useState<any>(blank);
   const [editingSlug, setEditingSlug] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [artistImageFileName, setArtistImageFileName] = useState("");
   const [autoArtistSlug, setAutoArtistSlug] = useState(true);
+  const [formError, setFormError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingSlug, setDeletingSlug] = useState("");
   const artistFormRef = useRef<HTMLDivElement>(null);
   const displayArtists = mergePublicArtists([...(getCachedPublicArtists() ?? []), ...data]);
 
   const pickArtistImage = (file?: File) => {
     if (!file) return;
+    setFormError("");
     setArtistImageFileName(file.name);
     const reader = new FileReader();
     reader.onload = () => {
@@ -1004,23 +1032,50 @@ function ArtistsPanel() {
   };
 
   const save = async () => {
+    const slug = toUrlSlug(form.slug || form.name);
+    const missingFields = [
+      !slug && "Slug",
+      !String(form.name ?? "").trim() && "Name",
+      !String(form.image ?? "").trim() && "Image",
+    ].filter(Boolean);
+
+    if (missingFields.length > 0) {
+      const message = `${missingFields.join(", ")} ${missingFields.length === 1 ? "is" : "are"} required.`;
+      setFormError(message);
+      toast.error(message);
+      return;
+    }
+
     const payload = {
       ...form,
-      slug: toUrlSlug(form.slug || form.name),
+      slug,
+      name: String(form.name).trim(),
+      image: String(form.image).trim(),
       genres: String(form.genres).split(",").map((item) => item.trim()).filter(Boolean),
       sortOrder: Number(form.sortOrder),
     };
-    const saved = editingSlug
-      ? await apiPut<any>(`/admin/artists/${editingSlug}`, payload)
-      : await apiPost<any>("/admin/artists", payload);
-    const nextArtists = mergePublicArtists([...displayArtists.filter((artist) => artist.slug !== saved.slug), saved]);
-    upsertCachedPublicArtist(saved);
-    updateData(nextArtists);
-    setForm(blank);
-    setEditingSlug("");
-    setArtistImageFileName("");
-    setAutoArtistSlug(true);
-    setShowForm(false);
+    setFormError("");
+    setIsSaving(true);
+    try {
+      const saved = editingSlug
+        ? await apiPut<any>(`/admin/artists/${editingSlug}`, payload)
+        : await apiPost<any>("/admin/artists", payload);
+      const nextArtists = mergePublicArtists([...displayArtists.filter((artist) => artist.slug !== saved.slug), saved]);
+      upsertCachedPublicArtist(saved);
+      updateData(nextArtists);
+      setForm(blank);
+      setEditingSlug("");
+      setArtistImageFileName("");
+      setAutoArtistSlug(true);
+      setShowForm(false);
+      toast.success(editingSlug ? "Artist updated successfully." : "Artist added successfully.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save artist.";
+      setFormError(message);
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const startAddArtist = () => {
@@ -1028,6 +1083,7 @@ function ArtistsPanel() {
     setEditingSlug("");
     setArtistImageFileName("");
     setAutoArtistSlug(true);
+    setFormError("");
     setShowForm(true);
   };
 
@@ -1036,6 +1092,7 @@ function ArtistsPanel() {
     setEditingSlug("");
     setArtistImageFileName("");
     setAutoArtistSlug(true);
+    setFormError("");
     setShowForm(false);
   };
 
@@ -1062,8 +1119,13 @@ function ArtistsPanel() {
       </div>
       {showForm && (
         <div ref={artistFormRef} className={`${panelClass} p-5 mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-28`}>
-          <LabeledInput label="Slug" caption="URL-friendly artist name used in the page address. Auto-fills from Name; use lowercase letters, numbers, and hyphens only." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => { setAutoArtistSlug(false); setForm({ ...form, slug: toUrlSlug(e.target.value) }); }} />
-          <LabeledInput label="Name" caption="Enter the artist name shown across the website; slug will auto-fill from this." value={form.name ?? ""} onChange={(e) => updateArtistName(e.target.value)} />
+          {formError && (
+            <div role="alert" className="md:col-span-2 border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm text-red-300 font-sans">
+              {formError}
+            </div>
+          )}
+          <LabeledInput required label="Slug *" caption="URL-friendly artist name used in the page address. Auto-fills from Name; use lowercase letters, numbers, and hyphens only." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => { setFormError(""); setAutoArtistSlug(false); setForm({ ...form, slug: toUrlSlug(e.target.value) }); }} />
+          <LabeledInput required label="Name *" caption="Enter the artist name shown across the website; slug will auto-fill from this." value={form.name ?? ""} onChange={(e) => { setFormError(""); updateArtistName(e.target.value); }} />
           <LabeledInput label="Genres" caption="Enter genres separated by commas, for example Dancehall,Hip-Hop." value={form.genres ?? ""} onChange={(e) => setForm({ ...form, genres: e.target.value })} />
           <LabeledInput label="Bio" caption="Write a short artist biography for the artist page." value={form.bio ?? ""} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
           <FileUrlField
@@ -1072,6 +1134,7 @@ function ArtistsPanel() {
             value={form.image ?? ""}
             fileName={artistImageFileName}
             onTextChange={(value) => {
+              setFormError("");
               setArtistImageFileName("");
               setForm({ ...form, image: value });
             }}
@@ -1088,18 +1151,25 @@ function ArtistsPanel() {
             <input type="checkbox" checked={form.active ?? true} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
             Active
           </label>
-          <button className={actionClass} onClick={save}><Save size={16} /> {editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"}</button>
+          <button className={actionClass} onClick={save} disabled={isSaving}><Save size={16} /> {isSaving ? "SAVING..." : editingSlug ? "UPDATE ARTIST" : "ADD ARTIST"}</button>
         </div>
       )}
       <AdminTable rows={displayArtists} columns={["name", "slug", "genres", "active"]} formatCell={(_, column, value) => column === "active" ? (value ? "Active" : "Inactive") : undefined} actions={(row) => (
         <>
-          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setArtistImageFileName(""); setAutoArtistSlug(false); setShowForm(true); scrollToForm(artistFormRef); }}>EDIT</button>
+          <button className={ghostClass} onClick={() => { setEditingSlug(row.slug); setForm({ ...row, genres: (row.genres ?? []).join(",") }); setArtistImageFileName(""); setAutoArtistSlug(false); setFormError(""); setShowForm(true); scrollToForm(artistFormRef); }}>EDIT</button>
           <button className={ghostClass} onClick={async () => {
-            await apiDelete(`/admin/artists/${row.slug}`);
-            const nextArtists = mergePublicArtists(displayArtists.filter((artist) => artist.slug !== row.slug));
-            removeCachedPublicArtist(row.slug);
-            updateData(nextArtists);
-          }}><Trash2 size={14} /></button>
+            setDeletingSlug(row.slug);
+            try {
+              await apiDelete(`/admin/artists/${row.slug}`);
+              removeCachedPublicArtist(row.slug);
+              await reload();
+              toast.success("Artist deleted successfully.");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Unable to delete artist.");
+            } finally {
+              setDeletingSlug("");
+            }
+          }} disabled={deletingSlug === row.slug}><Trash2 size={14} /> {deletingSlug === row.slug ? "DELETING..." : ""}</button>
         </>
       )} />
     </CrudLayout>
@@ -1319,8 +1389,15 @@ function CmsPanel() {
   const addPage = async () => {
     const pageKey = newPageKey.trim().toLowerCase();
     const title = newPageTitle.trim();
-    if (!pageKey) return;
-    await apiPost("/admin/cms/pages", { pageKey, title: title || pageKey, active: true });
+    if (!pageKey) {
+      toast.error("Page Key is required.");
+      return;
+    }
+    const saved = await performAdminAction(
+      () => apiPost("/admin/cms/pages", { pageKey, title: title || pageKey, active: true }),
+      "CMS page added successfully.",
+    );
+    if (!saved) return;
     clearPublicCmsPageCache(pageKey);
     setNewPageKey("");
     setNewPageTitle("");
@@ -1356,10 +1433,15 @@ function CmsPanel() {
 
   const savePage = async () => {
     if (!editingPageId) return;
-    await apiPut(`/admin/cms/pages/${editingPageId}`, {
-      title: pageEditTitle.trim(),
-      active: pageEditActive,
-    });
+    if (!pageEditTitle.trim()) {
+      toast.error("Page Title is required.");
+      return;
+    }
+    const saved = await performAdminAction(
+      () => apiPut(`/admin/cms/pages/${editingPageId}`, { title: pageEditTitle.trim(), active: pageEditActive }),
+      "CMS page updated successfully.",
+    );
+    if (!saved) return;
     clearPublicCmsPageCache(selectedPageKey);
     setEditingPageId("");
     setPageEditTitle("");
@@ -1370,7 +1452,8 @@ function CmsPanel() {
 
   const deletePage = async (page: CmsPage) => {
     if (protectedPageKeys.has(page.pageKey)) return;
-    await apiDelete(`/admin/cms/pages/${page.id}`);
+    const deleted = await performAdminAction(() => apiDelete(`/admin/cms/pages/${page.id}`), "CMS page deleted successfully.");
+    if (!deleted) return;
     clearPublicCmsPageCache(page.pageKey);
     await reloadPages();
     if (selectedPageKey === page.pageKey) {
@@ -1437,8 +1520,15 @@ function CmsPanel() {
       pageId: currentPage?.id,
       pageKey: selectedPageKey,
     };
-    if (editingSectionId) await apiPut(`/admin/cms/sections/${editingSectionId}`, payload);
-    else await apiPost("/admin/cms/sections", payload);
+    if (!String(payload.sectionKey).trim()) {
+      toast.error("Section Key is required.");
+      return;
+    }
+    const saved = await performAdminAction(
+      () => editingSectionId ? apiPut(`/admin/cms/sections/${editingSectionId}`, payload) : apiPost("/admin/cms/sections", payload),
+      editingSectionId ? "CMS section updated successfully." : "CMS section added successfully.",
+    );
+    if (!saved) return;
     clearPublicCmsPageCache(selectedPageKey);
     setEditingSectionId("");
     setAutoSectionKey(true);
@@ -1510,7 +1600,10 @@ function CmsPanel() {
   };
 
   const saveItem = async () => {
-    if (!selectedSectionId) return;
+    if (!selectedSectionId) {
+      toast.error("Select a CMS section first.");
+      return;
+    }
     const currentItems = currentSection?.items ?? [];
     const editingItem = currentItems.find((item) => item.id === editingItemId);
     const payload = {
@@ -1526,8 +1619,15 @@ function CmsPanel() {
       tags: String(itemForm.tags).split(",").map((tag) => tag.trim()).filter(Boolean),
       sortOrder: editingItem?.sortOrder ?? currentItems.length + 1,
     };
-    if (editingItemId) await apiPut(`/admin/cms/items/${editingItemId}`, payload);
-    else await apiPost(`/admin/cms/sections/${selectedSectionId}/items`, payload);
+    if (!itemForm.itemKey.trim() || !itemForm.title.trim()) {
+      toast.error("Item Key and Title are required.");
+      return;
+    }
+    const saved = await performAdminAction(
+      () => editingItemId ? apiPut(`/admin/cms/items/${editingItemId}`, payload) : apiPost(`/admin/cms/sections/${selectedSectionId}/items`, payload),
+      editingItemId ? "CMS item updated successfully." : "CMS item added successfully.",
+    );
+    if (!saved) return;
     clearPublicCmsPageCache(selectedPageKey);
     setEditingItemId("");
     setItemForm({
@@ -1738,7 +1838,12 @@ function CmsPanel() {
               scrollToForm(sectionFormRef);
             }}>EDIT</button>
             <button className={compactActionClass} onClick={() => openSectionItems(row.id)}>ITEMS</button>
-            <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/sections/${row.id}`); clearPublicCmsPageCache(selectedPageKey); await reload(); }}><Trash2 size={12} /></button>
+            <button className={compactActionClass} onClick={async () => {
+              const deleted = await performAdminAction(() => apiDelete(`/admin/cms/sections/${row.id}`), "CMS section deleted successfully.");
+              if (!deleted) return;
+              clearPublicCmsPageCache(selectedPageKey);
+              await reload();
+            }}><Trash2 size={12} /></button>
           </>
         )}
       />
@@ -1822,7 +1927,12 @@ function CmsPanel() {
                   setShowItemForm(true);
                   scrollToForm(itemFormRef);
                 }}>EDIT</button>
-                <button className={compactActionClass} onClick={async () => { await apiDelete(`/admin/cms/items/${row.id}`); clearPublicCmsPageCache(selectedPageKey); await reload(); }}><Trash2 size={12} /></button>
+                <button className={compactActionClass} onClick={async () => {
+                  const deleted = await performAdminAction(() => apiDelete(`/admin/cms/items/${row.id}`), "CMS item deleted successfully.");
+                  if (!deleted) return;
+                  clearPublicCmsPageCache(selectedPageKey);
+                  await reload();
+                }}><Trash2 size={12} /></button>
               </>
             )}
           />
@@ -1944,7 +2054,8 @@ function OrdersPanel({ orderId }: { orderId?: string }) {
                           className="w-full bg-[#111] border border-[#333] text-white font-sans px-1 py-1 text-xs focus:border-[var(--brand-yellow)] focus:outline-none"
                           value={row.status}
                           onChange={async (e) => {
-                            await apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value });
+                            const saved = await performAdminAction(() => apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value }), "Order status updated.");
+                            if (!saved) return;
                             await reload();
                           }}
                         >
@@ -2003,7 +2114,8 @@ function OrdersPanel({ orderId }: { orderId?: string }) {
                     className="w-full bg-[#111] border border-[#333] text-white font-sans px-2 py-2 text-sm focus:border-[var(--brand-yellow)] focus:outline-none"
                     value={row.status}
                     onChange={async (e) => {
-                      await apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value });
+                      const saved = await performAdminAction(() => apiPut(`/admin/orders/${row.id}/status`, { status: e.target.value }), "Order status updated.");
+                      if (!saved) return;
                       await reload();
                     }}
                   >
@@ -2051,7 +2163,8 @@ function OrdersPanel({ orderId }: { orderId?: string }) {
                       className={inputClass}
                       value={selectedOrder.status}
                       onChange={async (e) => {
-                        await apiPut(`/admin/orders/${selectedOrder.id}/status`, { status: e.target.value });
+                        const saved = await performAdminAction(() => apiPut(`/admin/orders/${selectedOrder.id}/status`, { status: e.target.value }), "Order status updated.");
+                        if (!saved) return;
                         await reload();
                         await refreshDetail(selectedOrder.id);
                       }}
@@ -2127,7 +2240,7 @@ function UsersPanel() {
   return (
     <CrudLayout title="USERS" loading={loading} error={error}>
       <AdminTable rows={data} columns={["name", "email", "phone", "role"]} actions={(row) => (
-        <select className={inputClass} value={row.role} onChange={async (e) => { await apiPut(`/admin/users/${row.id}/role`, { role: e.target.value }); await reload(); }}>
+        <select className={inputClass} value={row.role} onChange={async (e) => { const saved = await performAdminAction(() => apiPut(`/admin/users/${row.id}/role`, { role: e.target.value }), "User role updated."); if (saved) await reload(); }}>
           <option value="user">user</option>
           <option value="admin">admin</option>
         </select>
@@ -2142,7 +2255,7 @@ function BookingsPanel() {
   return (
     <CrudLayout title="BOOKINGS" loading={loading} error={error}>
       <AdminTable rows={data} columns={["name", "email", "artist", "eventType", "eventDate", "status"]} actions={(row) => (
-        <select className={inputClass} value={row.status} onChange={async (e) => { await apiPut(`/admin/bookings/${row.id}/status`, { status: e.target.value }); await reload(); }}>
+        <select className={inputClass} value={row.status} onChange={async (e) => { const saved = await performAdminAction(() => apiPut(`/admin/bookings/${row.id}/status`, { status: e.target.value }), "Booking status updated."); if (saved) await reload(); }}>
           {statuses.map((status) => <option key={status}>{status}</option>)}
         </select>
       )} />
@@ -2156,7 +2269,7 @@ function EventContactsPanel() {
   return (
     <CrudLayout title="EVENT CONTACT" loading={loading} error={error}>
       <AdminTable rows={data} columns={["name", "email", "phone", "artist", "eventType", "eventDate", "status"]} actions={(row) => (
-        <select className={inputClass} value={row.status} onChange={async (e) => { await apiPut(`/admin/event-contacts/${row.id}/status`, { status: e.target.value }); await reload(); }}>
+        <select className={inputClass} value={row.status} onChange={async (e) => { const saved = await performAdminAction(() => apiPut(`/admin/event-contacts/${row.id}/status`, { status: e.target.value }), "Contact status updated."); if (saved) await reload(); }}>
           {statuses.map((status) => <option key={status}>{status}</option>)}
         </select>
       )} />

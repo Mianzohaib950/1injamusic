@@ -30,22 +30,24 @@ export function getCachedPublicArtists() {
   try {
     const raw = window.sessionStorage.getItem(PUBLIC_ARTISTS_CACHE_KEY);
     const rows = raw ? JSON.parse(raw) : null;
-    return Array.isArray(rows) ? mergePublicArtists(rows as ArtistProfile[]) : null;
+    return Array.isArray(rows) ? rows as ArtistProfile[] : null;
   } catch {
     return null;
   }
 }
 
 export function setCachedPublicArtists(rows: ArtistProfile[]) {
-  const current = getCachedPublicArtists() ?? [];
-  const merged = mergePublicArtists([...current, ...rows]);
-  if (typeof window === "undefined") return merged;
+  const normalized = rows
+    .filter((artist) => artist?.slug && artist.active !== false)
+    .map((artist) => ({ ...artist, spotifyUrl: getCanonicalSpotifyUrl(artist.slug, artist.spotifyUrl) }))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
+  if (typeof window === "undefined") return normalized;
   try {
-    window.sessionStorage.setItem(PUBLIC_ARTISTS_CACHE_KEY, JSON.stringify(merged));
+    window.sessionStorage.setItem(PUBLIC_ARTISTS_CACHE_KEY, JSON.stringify(normalized));
   } catch {
     // Ignore storage quota errors.
   }
-  return merged;
+  return normalized;
 }
 
 export function upsertCachedPublicArtist(artist: ArtistProfile) {
