@@ -1,5 +1,9 @@
 import { randomUUID } from "crypto";
 
+// Support the environment variable name already used by existing deployments.
+// New deployments should use the server-only SUPABASE_URL name.
+process.env.SUPABASE_URL ||= process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 const EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
@@ -49,7 +53,19 @@ function encodedObjectPath(path: string) {
     .join("/");
 }
 
-export async function uploadImageIfNeeded(value: unknown, folder: string) {
+async function ensurePublicBucket(supabaseUrl: string, serviceRoleKey: string, bucket: string) {
+  const response = await fetch(`${supabaseUrl}/storage/v1/bucket`, {
+    method: "POST",
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: bucket, name: bucket, public: true }),
+  });
+  if (!response.ok && response.status !== 409) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Unable to create storage bucket "${bucket}" (${response.status}): ${detail || "unknown error"}`);
+  }
+}
+
+export async function uploadImageIfNeeded(value: unknown, folder: string, bucketCreated = false) {
   if (typeof value !== "string") return value;
   const source = value.trim();
   if (!source) return source;
@@ -58,7 +74,7 @@ export async function uploadImageIfNeeded(value: unknown, folder: string) {
   if (!parsed) return source;
 
   const supabaseUrl = String(process.env.SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
   const bucket = String(process.env.SUPABASE_STORAGE_BUCKET ?? "").trim();
   if (!supabaseUrl || !serviceRoleKey || !bucket) {
     return source;
@@ -84,15 +100,20 @@ export async function uploadImageIfNeeded(value: unknown, folder: string) {
 
   if (!uploadResponse.ok) {
     const errorText = await uploadResponse.text().catch(() => "");
+    if (/bucket not found|nosuchbucket/i.test(errorText)) {
+      if (bucketCreated) throw new Error(`Storage bucket "${bucket}" is unavailable after creation. Verify the Supabase project and service-role key.`);
+      await ensurePublicBucket(supabaseUrl, serviceRoleKey, bucket);
+      return uploadImageIfNeeded(value, folder, true);
+    }
     throw new Error(`Supabase storage upload failed (${uploadResponse.status}): ${errorText || "unknown error"}`);
   }
 
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${encodedObjectPath(objectPath)}`;
 }
 
-export async function uploadMediaFile(file: File, folder: string) {
+export async function uploadMediaFile(file: File, folder: string, bucketCreated = false) {
   const supabaseUrl = String(process.env.SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
   const bucket = String(process.env.SUPABASE_STORAGE_BUCKET ?? "").trim();
   if (!supabaseUrl || !serviceRoleKey || !bucket) {
     throw new Error("Supabase storage is not configured");
@@ -116,6 +137,11 @@ export async function uploadMediaFile(file: File, folder: string) {
 
   if (!uploadResponse.ok) {
     const errorText = await uploadResponse.text().catch(() => "");
+    if (/bucket not found|nosuchbucket/i.test(errorText)) {
+      if (bucketCreated) throw new Error(`Storage bucket "${bucket}" is unavailable after creation. Verify the Supabase project and service-role key.`);
+      await ensurePublicBucket(supabaseUrl, serviceRoleKey, bucket);
+      return uploadMediaFile(file, folder, true);
+    }
     throw new Error(`Supabase storage upload failed (${uploadResponse.status}): ${errorText || "unknown error"}`);
   }
 

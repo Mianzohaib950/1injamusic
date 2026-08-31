@@ -59,7 +59,7 @@ const productCategoryOptions = ["tee", "hoodie", "cap", "vinyl", "poster", "bund
 const productSizeOptions = ["S", "M", "L", "XL", "XXL"];
 const artistSortOrderOptions = Array.from({ length: 21 }, (_, index) => index);
 const ADMIN_CACHE_TTL_MS = 60_000;
-const ADMIN_REQUEST_TIMEOUT_MS = 20_000;
+const ADMIN_REQUEST_TIMEOUT_MS = 60_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
@@ -121,7 +121,7 @@ function makeDashboardFallback() {
       orders: orderRows.length,
       revenueCents,
       products: productRows.length,
-      artists: artistRows.length,
+      artists: artistRows.filter((artist) => artist.active !== false).length,
       bookings: bookingRows.length,
       eventContacts: eventContactRows.length,
     },
@@ -252,6 +252,10 @@ function getFreshAdminCache<T>(path: string) {
 }
 
 function setAdminCache(path: string, data: unknown) {
+  if (["/admin/products", "/admin/artists", "/admin/orders", "/admin/users", "/admin/bookings", "/admin/event-contacts"].includes(path)) {
+    adminDataCache.delete("/admin/dashboard");
+    if (typeof window !== "undefined") window.sessionStorage.removeItem(`${ADMIN_CACHE_STORAGE_PREFIX}/admin/dashboard`);
+  }
   const payload = { data, timestamp: Date.now() };
   adminDataCache.set(path, payload);
   if (MEMORY_ONLY_CACHE_PREFIXES.some((prefix) => path.startsWith(prefix))) return;
@@ -279,6 +283,9 @@ function clearPublicCmsPageCache(pageKey?: string) {
   } catch {
     // Ignore storage cleanup errors.
   }
+  const detail = { pageKey: pageKey || "" };
+  window.dispatchEvent(new CustomEvent("cms-content-updated", { detail }));
+  try { window.localStorage.setItem("cms-content-updated", JSON.stringify({ ...detail, timestamp: Date.now() })); } catch { /* Best effort. */ }
 }
 
 async function fetchAdminData<T>(path: string) {
@@ -394,16 +401,18 @@ function FieldShell({
   label,
   caption,
   className = "",
+  required = false,
   children,
 }: {
   label: string;
   caption: string;
   className?: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className={`text-[var(--brand-gray)] font-sans text-xs ${className}`}>
-      <p className="mb-2">{label}</p>
+      <p className="mb-2">{label}{required && <span className="ml-1 text-red-500" aria-hidden="true">*</span>}</p>
       {children}
       <p className="mt-1 text-xs leading-snug text-[var(--brand-gray)]/75">{caption}</p>
     </div>
@@ -422,7 +431,7 @@ function LabeledInput({
   inputClassName?: string;
 }) {
   return (
-    <FieldShell label={label} caption={caption} className={className}>
+    <FieldShell label={label.replace(/\s*\*$/, "")} caption={caption} className={className} required={props.required}>
       <input {...props} className={`${inputClass} ${inputClassName}`} />
     </FieldShell>
   );
@@ -480,6 +489,9 @@ function FileUrlField({
   onTextChange,
   onFileChange,
   accept = "image/*",
+  required = false,
+  hideRemoteValue = false,
+  hiddenValueLabel = "File uploaded successfully",
 }: {
   label: string;
   caption: string;
@@ -488,17 +500,23 @@ function FileUrlField({
   onTextChange: (value: string) => void;
   onFileChange: (file?: File) => void;
   accept?: string;
+  required?: boolean;
+  hideRemoteValue?: boolean;
+  hiddenValueLabel?: string;
 }) {
+  const remoteValueHidden = hideRemoteValue && /\/storage\/v1\/object\//i.test(value);
   return (
-    <FieldShell label={label} caption={caption}>
+    <FieldShell label={label} caption={caption} required={required}>
       <div className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
         <input
           className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
-          value={value}
+          value={remoteValueHidden ? "" : value}
+          placeholder={remoteValueHidden ? hiddenValueLabel : undefined}
+          required={required}
           onChange={(e) => onTextChange(e.target.value)}
         />
         <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
-          {fileName || "Choose"}
+          <span className="max-w-52 truncate">{fileName || "Choose file"}</span>
           <input className="hidden" type="file" accept={accept} onChange={(e) => onFileChange(e.target.files?.[0])} />
         </label>
       </div>
@@ -585,7 +603,16 @@ function CheckboxDropdownField({
 
 function Dashboard() {
   const initialDashboard = useMemo(() => makeDashboardFallback(), []);
-  const { data, loading, error } = useAdminData<any>("/admin/dashboard", initialDashboard);
+  const { data, loading, error, reload } = useAdminData<any>("/admin/dashboard", initialDashboard);
+  useEffect(() => {
+    const refresh = () => { void reload(); };
+    const intervalId = window.setInterval(refresh, 5_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
   const statusEntries = useMemo(() => {
     const byStatus = (data?.ordersByStatus ?? {}) as Record<string, number>;
     return [
@@ -1033,14 +1060,19 @@ function ArtistsPanel() {
 
   const save = async () => {
     const slug = toUrlSlug(form.slug || form.name);
-    const missingFields = [
-      !slug && "Slug",
-      !String(form.name ?? "").trim() && "Name",
-      !String(form.image ?? "").trim() && "Image",
-    ].filter(Boolean);
+    const name = String(form.name ?? "").trim();
+    const image = String(form.image ?? "").trim();
+    const spotifyUrl = String(form.spotifyUrl ?? "").trim();
+    let message = "";
+    if (!name) message = "Artist name is required.";
+    else if (!slug) message = "Artist slug is required.";
+    else if (!image) message = "Artist image is required. Paste an image URL or choose a file.";
+    else if (!spotifyUrl) message = "Spotify Artist URL is required.";
+    else if (!/^https:\/\/(?:open\.)?spotify\.com\/artist\/[A-Za-z0-9]+(?:[/?].*)?$/i.test(spotifyUrl)) {
+      message = "Enter a valid Spotify artist URL, for example https://open.spotify.com/artist/ARTIST_ID.";
+    }
 
-    if (missingFields.length > 0) {
-      const message = `${missingFields.join(", ")} ${missingFields.length === 1 ? "is" : "are"} required.`;
+    if (message) {
       setFormError(message);
       toast.error(message);
       return;
@@ -1049,8 +1081,9 @@ function ArtistsPanel() {
     const payload = {
       ...form,
       slug,
-      name: String(form.name).trim(),
-      image: String(form.image).trim(),
+      name,
+      image,
+      spotifyUrl,
       genres: String(form.genres).split(",").map((item) => item.trim()).filter(Boolean),
       sortOrder: Number(form.sortOrder),
     };
@@ -1124,11 +1157,12 @@ function ArtistsPanel() {
               {formError}
             </div>
           )}
-          <LabeledInput required label="Slug *" caption="URL-friendly artist name used in the page address. Auto-fills from Name; use lowercase letters, numbers, and hyphens only." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => { setFormError(""); setAutoArtistSlug(false); setForm({ ...form, slug: toUrlSlug(e.target.value) }); }} />
-          <LabeledInput required label="Name *" caption="Enter the artist name shown across the website; slug will auto-fill from this." value={form.name ?? ""} onChange={(e) => { setFormError(""); updateArtistName(e.target.value); }} />
+          <LabeledInput required label="Slug" caption="URL-friendly artist name used in the page address. Auto-fills from Name; use lowercase letters, numbers, and hyphens only." value={form.slug ?? ""} disabled={!!editingSlug} onChange={(e) => { setFormError(""); setAutoArtistSlug(false); setForm({ ...form, slug: toUrlSlug(e.target.value) }); }} />
+          <LabeledInput required label="Name" caption="Enter the artist name shown across the website; slug will auto-fill from this." value={form.name ?? ""} onChange={(e) => { setFormError(""); updateArtistName(e.target.value); }} />
           <LabeledInput label="Genres" caption="Enter genres separated by commas, for example Dancehall,Hip-Hop." value={form.genres ?? ""} onChange={(e) => setForm({ ...form, genres: e.target.value })} />
           <LabeledInput label="Bio" caption="Write a short artist biography for the artist page." value={form.bio ?? ""} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
           <FileUrlField
+            required
             label="Image"
             caption="Paste a profile image URL or choose an image file from your device."
             value={form.image ?? ""}
@@ -1141,7 +1175,7 @@ function ArtistsPanel() {
             onFileChange={pickArtistImage}
           />
           <LabeledInput label="Booking Email" caption="Enter the email address used for artist booking requests." value={form.bookingEmail ?? ""} onChange={(e) => setForm({ ...form, bookingEmail: e.target.value })} />
-          <LabeledInput label="Spotify Artist URL" caption="Paste the official open.spotify.com/artist/... profile URL for the embedded player." value={form.spotifyUrl ?? ""} onChange={(e) => setForm({ ...form, spotifyUrl: e.target.value })} />
+          <LabeledInput required type="url" label="Spotify Artist URL" caption="Paste the official open.spotify.com/artist/... profile URL for the embedded player." value={form.spotifyUrl ?? ""} onChange={(e) => { setFormError(""); setForm({ ...form, spotifyUrl: e.target.value }); }} />
           <DropdownField label="Sort Order" caption="Choose the display priority for this artist." value={String(form.sortOrder ?? 0)} onChange={(value) => setForm({ ...form, sortOrder: Number(value) })}>
             {artistSortOrderOptions.map((sortOrder) => (
               <option key={sortOrder} value={sortOrder}>{sortOrder}</option>
@@ -1369,9 +1403,10 @@ function CmsPanel() {
       formData.append("file", file);
       const result = await apiPost<{ url: string }>("/admin/uploads/video", formData);
       setSectionForm((current) => ({ ...current, videoUrl: result.url }));
+      toast.success(`Video uploaded. Click ${editingSectionId ? "Update Section" : "Add Section"} to publish it.`);
     } catch (uploadError) {
       setSectionVideoFileName("");
-      window.alert(uploadError instanceof Error ? uploadError.message : "Video upload failed");
+      toast.error(uploadError instanceof Error ? `Video upload failed: ${uploadError.message}` : "Video upload failed. Please try again.");
     } finally {
       setUploadingSectionVideo(false);
     }
@@ -1782,10 +1817,14 @@ function CmsPanel() {
           />
           <FileUrlField
             label="Video"
-            caption={uploadingSectionVideo ? "Uploading video to Supabase Storage..." : "Paste a YouTube/direct video URL or upload MP4, WebM, OGG, or MOV (max 100 MB)."}
+            caption={uploadingSectionVideo
+              ? "Uploading video..."
+              : `Paste a video URL or choose a video file, then click ${editingSectionId ? "Update Section" : "Add Section"} to show it on the website.`}
             value={sectionForm.videoUrl}
             fileName={sectionVideoFileName}
             accept="video/mp4,video/webm,video/ogg,video/quicktime"
+            hideRemoteValue
+            hiddenValueLabel=""
             onTextChange={(value) => {
               setSectionVideoFileName("");
               setSectionForm({ ...sectionForm, videoUrl: value });

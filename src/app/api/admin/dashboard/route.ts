@@ -1,7 +1,6 @@
 import { eventContacts, getDb, orderItems, orders, products, users, artists, bookings } from "@/lib/server/db";
 import { requireAdminAuth } from "@/lib/server/admin";
 import { json, serverError } from "@/lib/server/http";
-import { ensureServerSchema } from "@/lib/server/schemaSync";
 import { listDevUsers } from "@/lib/server/devAuthStore";
 import { withDatabaseRetry } from "@/lib/server/dbRetry";
 
@@ -22,18 +21,16 @@ export async function GET(request: Request) {
     if (auth instanceof Response) return auth;
     const [productRows, orderRows, userRows, artistRows, bookingRows, orderItemRows, eventContactRows] =
       await withDatabaseRetry(async () => {
-        await ensureServerSchema();
-
         const db = getDb();
-        const productRows = await db.select().from(products);
-        const orderRows = await db.select().from(orders);
-        const userRows = await db.select().from(users);
-        const artistRows = await db.select().from(artists);
-        const bookingRows = await db.select().from(bookings);
-        const orderItemRows = await db.select().from(orderItems);
-        const eventContactRows = await db.select().from(eventContacts);
-
-        return [productRows, orderRows, userRows, artistRows, bookingRows, orderItemRows, eventContactRows];
+        return Promise.all([
+          db.select().from(products),
+          db.select().from(orders),
+          db.select().from(users),
+          db.select().from(artists),
+          db.select().from(bookings),
+          db.select().from(orderItems),
+          db.select().from(eventContacts),
+        ]);
       });
 
     const devUserRows = process.env.VERCEL ? [] : await listDevUsers();
@@ -59,7 +56,7 @@ export async function GET(request: Request) {
     return json({
       totals: {
         products: productRows.length,
-        artists: artistRows.length,
+        artists: artistRows.filter((artist: typeof artists.$inferSelect) => artist.active).length,
         bookings: bookingRows.length,
         eventContacts: eventContactRows.length,
         orders: orderRows.length,

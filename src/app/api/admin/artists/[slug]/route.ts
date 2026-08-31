@@ -39,6 +39,12 @@ export async function PUT(
 
     const { slug } = await context.params;
     const body = await readJson(request);
+    if (!String(body.name ?? "").trim()) return apiError("Artist name is required", 400);
+    if (!String(body.image ?? "").trim()) return apiError("Artist image is required", 400);
+    if (!String(body.spotifyUrl ?? "").trim()) return apiError("Spotify Artist URL is required", 400);
+    if (!/^https:\/\/(?:open\.)?spotify\.com\/artist\/[A-Za-z0-9]+(?:[/?].*)?$/i.test(String(body.spotifyUrl))) {
+      return apiError("Enter a valid Spotify artist URL", 400);
+    }
     const resolvedImage = body.image == null ? undefined : await uploadImageIfNeeded(body.image, "artists/profile");
     const patch = {
       name: body.name,

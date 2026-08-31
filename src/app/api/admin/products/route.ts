@@ -34,7 +34,6 @@ export async function GET(request: Request) {
     const adminError = requireAdmin(auth);
     if (adminError) return adminError;
     const items = await withDatabaseRetry(async () => {
-      await ensureServerSchema();
       return getDb().select().from(products).orderBy(desc(products.createdAt));
     });
     return json(items);

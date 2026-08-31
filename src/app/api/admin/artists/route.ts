@@ -47,8 +47,12 @@ export async function POST(request: Request) {
 
     const body = await readJson(request);
     const item = artistInput(body);
-    if (!item.slug || !item.name || !item.image || !String(item.image).trim()) {
-      return apiError("Slug, name, and image URL are required", 400);
+    if (!String(item.name).trim()) return apiError("Artist name is required", 400);
+    if (!item.slug) return apiError("Artist slug is required", 400);
+    if (!String(item.image).trim()) return apiError("Artist image is required", 400);
+    if (!String(item.spotifyUrl).trim()) return apiError("Spotify Artist URL is required", 400);
+    if (!/^https:\/\/(?:open\.)?spotify\.com\/artist\/[A-Za-z0-9]+(?:[/?].*)?$/i.test(String(item.spotifyUrl))) {
+      return apiError("Enter a valid Spotify artist URL", 400);
     }
 
     const resolvedItem = {

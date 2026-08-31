@@ -123,8 +123,14 @@ export default function Home() {
       }
     };
     loadCms();
+    const refreshCms = () => { if (active) void loadCms(); };
+    const handleStorage = (event: StorageEvent) => { if (event.key === "cms-content-updated") refreshCms(); };
+    window.addEventListener("cms-content-updated", refreshCms);
+    window.addEventListener("storage", handleStorage);
     return () => {
       active = false;
+      window.removeEventListener("cms-content-updated", refreshCms);
+      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
@@ -339,9 +345,13 @@ export default function Home() {
   const marqueeText = normalizeBrandCopy(marqueeSection?.body || "1 IN JAMAICA MUSIC · LET'S CREATE SOMETHING GREAT TOGETHER · HINTELL · DARK KOKO · SWAZZ · MEE$CH ·");
   const whatWeDoTitle = whatWeDoSection?.title || "WHAT WE DO";
   const whatWeDoBody = whatWeDoSection?.body || "WE COLLABORATE WITH AMBITIOUS DJS AND PRODUCERS. LET'S MAKE SOMETHING GREAT TOGETHER.";
-  const whatWeDoSettings = (whatWeDoSection?.settings ?? {}) as Record<string, any>;
-  const artistsCount = Number(whatWeDoSettings.artistsCount ?? 4);
-  const releasesCount = Number(whatWeDoSettings.releasesCount ?? 50);
+  const artistsCount = publicArtists.filter((artist) => artist.active !== false).length;
+  const releasesCount = spotifyReleases.length;
+
+  useEffect(() => {
+    if (stat1Ref.current) stat1Ref.current.textContent = String(artistsCount);
+    if (stat2Ref.current) stat2Ref.current.textContent = String(releasesCount);
+  }, [artistsCount, releasesCount]);
 
   const artistsPreviewItems = getActiveItems(artistsPreviewSection);
   const configuredArtistPreviews = artistsPreviewItems.map((item) => ({
