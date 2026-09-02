@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (file.size > MAX_VIDEO_BYTES) return apiError("Video must be 100 MB or smaller", 400);
 
     const url = await uploadMediaFile(file, "cms/videos");
-    return json({ url });
+    return json({ url, fileName: file.name });
   } catch (error) {
     return serverError(error);
   }

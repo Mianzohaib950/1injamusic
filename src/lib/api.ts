@@ -1,8 +1,16 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
 export interface ApiErrorResponse {
-  error?: string;
+  error?: string | { message?: string; code?: string | number };
   message?: string;
+}
+
+function getErrorMessage(data: any, response: Response) {
+  if (typeof data?.error === "string" && data.error.trim()) return data.error;
+  if (typeof data?.error?.message === "string" && data.error.message.trim()) return data.error.message;
+  if (typeof data?.message === "string" && data.message.trim()) return data.message;
+  if (response.status === 413) return "The selected file is too large for the server.";
+  return response.statusText || "The server could not complete this request.";
 }
 
 async function parseResponse(response: Response) {
@@ -16,7 +24,7 @@ async function parseResponse(response: Response) {
     }
   }
   if (!response.ok) {
-    const message = (data && (data.error || data.message || JSON.stringify(data))) || response.statusText;
+    const message = getErrorMessage(data, response);
     const error = new Error(message);
     (error as any).status = response.status;
     (error as any).data = data;

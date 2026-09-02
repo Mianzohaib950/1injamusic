@@ -61,6 +61,8 @@ const artistSortOrderOptions = Array.from({ length: 21 }, (_, index) => index);
 const ADMIN_CACHE_TTL_MS = 60_000;
 const ADMIN_REQUEST_TIMEOUT_MS = 60_000;
 const ADMIN_CACHE_STORAGE_PREFIX = "admin-cache:";
+const MAX_CMS_VIDEO_BYTES = 100 * 1024 * 1024;
+const MAX_CMS_VIDEO_LABEL = "100 MB";
 const adminDataCache = new Map<string, { data: unknown; timestamp: number }>();
 const adminDataInflight = new Map<string, Promise<unknown>>();
 const MEMORY_ONLY_CACHE_PREFIXES: string[] = [];
@@ -193,6 +195,14 @@ function toSectionKey(value: string) {
   return toUrlSlug(value).replace(/-/g, "_");
 }
 
+function fileNameFromUrl(value: string) {
+  try {
+    return decodeURIComponent(new URL(value).pathname.split("/").filter(Boolean).pop() ?? "");
+  } catch {
+    return "";
+  }
+}
+
 function inferProductBadge(value: string) {
   const name = String(value).toLowerCase();
   if (!name.trim()) return "";
@@ -272,12 +282,12 @@ function clearPublicCmsPageCache(pageKey?: string) {
   try {
     if (pageKey) {
       window.sessionStorage.removeItem(`cms-page:${String(pageKey).toLowerCase()}`);
-      return;
-    }
-    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
-      const key = window.sessionStorage.key(index);
-      if (key?.startsWith("cms-page:")) {
-        window.sessionStorage.removeItem(key);
+    } else {
+      for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+        const key = window.sessionStorage.key(index);
+        if (key?.startsWith("cms-page:")) {
+          window.sessionStorage.removeItem(key);
+        }
       }
     }
   } catch {
@@ -492,6 +502,7 @@ function FileUrlField({
   required = false,
   hideRemoteValue = false,
   hiddenValueLabel = "File uploaded successfully",
+  showFileNameOnButton = true,
 }: {
   label: string;
   caption: string;
@@ -503,20 +514,36 @@ function FileUrlField({
   required?: boolean;
   hideRemoteValue?: boolean;
   hiddenValueLabel?: string;
+  showFileNameOnButton?: boolean;
 }) {
   const remoteValueHidden = hideRemoteValue && /\/storage\/v1\/object\//i.test(value);
+  const [replacingHiddenValue, setReplacingHiddenValue] = useState(false);
+  const displayedValue = remoteValueHidden
+    ? replacingHiddenValue ? "" : hiddenValueLabel
+    : value;
+
+  useEffect(() => {
+    if (!remoteValueHidden) setReplacingHiddenValue(false);
+  }, [remoteValueHidden]);
+
   return (
     <FieldShell label={label} caption={caption} required={required}>
       <div className="flex min-w-0 border border-[#333] bg-[#111] focus-within:border-[var(--brand-yellow)]">
         <input
           className="min-w-0 flex-1 bg-transparent text-white font-sans px-3 py-2 focus:outline-none"
-          value={remoteValueHidden ? "" : value}
-          placeholder={remoteValueHidden ? hiddenValueLabel : undefined}
+          value={displayedValue}
+          placeholder={remoteValueHidden && replacingHiddenValue ? "Paste a new video URL" : undefined}
           required={required}
+          onFocus={() => {
+            if (remoteValueHidden) setReplacingHiddenValue(true);
+          }}
+          onBlur={() => {
+            if (remoteValueHidden) setReplacingHiddenValue(false);
+          }}
           onChange={(e) => onTextChange(e.target.value)}
         />
         <label className="inline-flex items-center justify-center border-l border-[#333] px-4 text-[var(--brand-gray)] font-bebas tracking-widest cursor-pointer hover:text-[var(--brand-yellow)]">
-          <span className="max-w-52 truncate">{fileName || "Choose file"}</span>
+          <span className="max-w-52 truncate">{showFileNameOnButton && fileName ? fileName : "Choose file"}</span>
           <input className="hidden" type="file" accept={accept} onChange={(e) => onFileChange(e.target.files?.[0])} />
         </label>
       </div>
@@ -1396,17 +1423,49 @@ function CmsPanel() {
 
   const pickCmsVideo = async (file?: File) => {
     if (!file) return;
+    if (file.size > MAX_CMS_VIDEO_BYTES) {
+      setSectionVideoFileName("");
+      toast.error(`Video is too large. Maximum allowed size is ${MAX_CMS_VIDEO_LABEL}.`);
+      return;
+    }
     setSectionVideoFileName(file.name);
     setUploadingSectionVideo(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const result = await apiPost<{ url: string }>("/admin/uploads/video", formData);
-      setSectionForm((current) => ({ ...current, videoUrl: result.url }));
-      toast.success(`Video uploaded. Click ${editingSectionId ? "Update Section" : "Add Section"} to publish it.`);
+      const result = await apiPost<{ url: string; fileName?: string }>("/admin/uploads/video", formData);
+      const uploadedFileName = result.fileName || file.name;
+      const nextSectionForm = { ...sectionForm, videoUrl: result.url };
+      setSectionForm(nextSectionForm);
+      setSectionVideoFileName(uploadedFileName);
+
+      if (editingSectionId) {
+        const editingSection = data.find((section) => section.id === editingSectionId);
+        await apiPut(`/admin/cms/sections/${editingSectionId}`, {
+          ...nextSectionForm,
+          settings: {
+            ...(editingSection?.settings ?? {}),
+            videoFileName: uploadedFileName,
+          },
+          sortOrder: editingSection?.sortOrder ?? data.length + 1,
+          pageId: currentPage?.id,
+          pageKey: selectedPageKey,
+        });
+        clearPublicCmsPageCache(selectedPageKey);
+        await reload();
+        toast.success("Video uploaded and published on the home page.");
+      } else {
+        toast.success("Video uploaded. Click Add Section to publish it.");
+      }
     } catch (uploadError) {
       setSectionVideoFileName("");
-      toast.error(uploadError instanceof Error ? `Video upload failed: ${uploadError.message}` : "Video upload failed. Please try again.");
+      const status = (uploadError as { status?: number } | null)?.status;
+      const message = status === 413
+        ? `Video is too large. Maximum allowed size is ${MAX_CMS_VIDEO_LABEL}.`
+        : uploadError instanceof Error
+          ? `Video upload failed: ${uploadError.message}`
+          : "Video upload failed. Please try again.";
+      toast.error(message);
     } finally {
       setUploadingSectionVideo(false);
     }
@@ -1550,7 +1609,10 @@ function CmsPanel() {
     const editingSection = data.find((section) => section.id === editingSectionId);
     const payload = {
       ...sectionForm,
-      settings: editingSection?.settings ?? {},
+      settings: {
+        ...(editingSection?.settings ?? {}),
+        videoFileName: sectionVideoFileName || fileNameFromUrl(sectionForm.videoUrl),
+      },
       sortOrder: editingSection?.sortOrder ?? data.length + 1,
       pageId: currentPage?.id,
       pageKey: selectedPageKey,
@@ -1819,14 +1881,15 @@ function CmsPanel() {
             label="Video"
             caption={uploadingSectionVideo
               ? "Uploading video..."
-              : `Paste a video URL or choose a video file, then click ${editingSectionId ? "Update Section" : "Add Section"} to show it on the website.`}
+              : `Upload MP4, WebM, OGG, or MOV, or paste a video URL. Max ${MAX_CMS_VIDEO_LABEL}.`}
             value={sectionForm.videoUrl}
             fileName={sectionVideoFileName}
             accept="video/mp4,video/webm,video/ogg,video/quicktime"
             hideRemoteValue
-            hiddenValueLabel=""
+            hiddenValueLabel={sectionVideoFileName || "Uploaded video"}
+            showFileNameOnButton={false}
             onTextChange={(value) => {
-              setSectionVideoFileName("");
+              setSectionVideoFileName(fileNameFromUrl(value));
               setSectionForm({ ...sectionForm, videoUrl: value });
             }}
             onFileChange={pickCmsVideo}
@@ -1872,7 +1935,11 @@ function CmsPanel() {
                 active: row.active ?? true,
               });
               setSectionImageFileName("");
-              setSectionVideoFileName("");
+              setSectionVideoFileName(
+                typeof row.settings?.videoFileName === "string" && row.settings.videoFileName
+                  ? row.settings.videoFileName
+                  : fileNameFromUrl(row.videoUrl),
+              );
               setShowSectionForm(true);
               scrollToForm(sectionFormRef);
             }}>EDIT</button>
