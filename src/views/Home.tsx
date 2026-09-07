@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, ChevronDown, Pause, Play, Instagram, Twitter, Facebook, Youtube, Music } from "lucide-react";
+import { ArrowRight, ChevronDown, Pause, Play, Instagram, Facebook, Youtube, Music } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { titleToSlug } from "@/data/releases";
@@ -42,6 +42,17 @@ const getYouTubeVideoId = (value: string) => {
     return "";
   }
   return "";
+};
+
+const takeLatestPerArtist = <T extends { artist: string }>(releases: T[], limit = 2) => {
+  const counts = new Map<string, number>();
+  return releases.filter((release) => {
+    const artistKey = release.artist.trim().toLowerCase();
+    const count = counts.get(artistKey) ?? 0;
+    if (count >= limit) return false;
+    counts.set(artistKey, count + 1);
+    return true;
+  });
 };
 
 type CmsItem = {
@@ -388,8 +399,10 @@ export default function Home() {
     spotifyReleases.map((release) => [releaseMatchKey(release.artist, release.title), release]),
   );
   const unlinkedCmsReleaseKeys = new Set(cmsNewDrops.filter((release) => !release.spotifyEmbed).map((release) => `${release.artist.toLowerCase()}:${release.title.toLowerCase()}`));
-  const visibleSpotifyReleases = spotifyReleases.filter((release) => !unlinkedCmsReleaseKeys.has(`${release.artist.toLowerCase()}:${release.title.toLowerCase()}`));
-  const spotifyNewDrops = visibleSpotifyReleases.slice(0, 8).map((release) => ({
+  const visibleSpotifyReleases = spotifyReleases
+    .filter((release) => !unlinkedCmsReleaseKeys.has(`${release.artist.toLowerCase()}:${release.title.toLowerCase()}`))
+    .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate));
+  const spotifyNewDrops = takeLatestPerArtist(visibleSpotifyReleases).map((release) => ({
         title: release.title,
         artist: release.artist,
         genre: `${release.type.toUpperCase()} · ${release.releaseDate} · ${release.totalTracks} TRACK${release.totalTracks === 1 ? "" : "S"}`,
@@ -428,10 +441,10 @@ export default function Home() {
     })(),
   }));
   const spotifyDropKeys = new Set(spotifyNewDrops.flatMap((drop) => [drop.spotifyRelease.id, `${drop.artist.toLowerCase()}:${drop.title.toLowerCase()}`]));
-  const newDrops = [
+  const newDrops = takeLatestPerArtist([
     ...spotifyNewDrops,
     ...cmsMappedDrops.filter((drop) => !spotifyDropKeys.has(drop.spotifyEmbed?.id ?? "") && !spotifyDropKeys.has(`${drop.artist.toLowerCase()}:${drop.title.toLowerCase()}`)),
-  ].slice(0, 8);
+  ]);
 
   const albumItems = getActiveItems(albumGallerySection);
   const albumsFromNewDrops = newDrops.map((release) => ({ name: release.title, image: release.image, spotifyRelease: release.spotifyRelease, linkUrl: release.spotifyRelease ? `/spotify-releases/${release.spotifyRelease.id}` : release.linkUrl }));
@@ -450,6 +463,8 @@ export default function Home() {
   const featuredVideoUrl = featuredVideoSection?.videoUrl || "/latest-video.mp4";
   const featuredYouTubeId = getYouTubeVideoId(featuredVideoUrl);
   const featuredVideoPoster = featuredVideoSection?.imageUrl || (featuredYouTubeId ? `https://i.ytimg.com/vi/${featuredYouTubeId}/maxresdefault.jpg` : "");
+  const featuredVideoCtaLabel = featuredVideoSection?.ctaLabel || (featuredYouTubeId ? "WATCH ON YOUTUBE" : "");
+  const featuredVideoCtaUrl = featuredVideoSection?.ctaUrl || (featuredYouTubeId ? featuredVideoUrl : "");
 
   useEffect(() => {
     setFeaturedVideoPlaying(false);
@@ -500,14 +515,12 @@ export default function Home() {
     : defaultFooterContacts;
   const socialIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     instagram: Instagram,
-    twitter: Twitter,
     facebook: Facebook,
     youtube: Youtube,
     music: Music,
   };
   const defaultSocialLinks = [
     { key: "instagram", url: "#" },
-    { key: "twitter", url: "#" },
     { key: "facebook", url: "#" },
     { key: "youtube", url: "#" },
     { key: "music", url: "#" },
@@ -516,7 +529,7 @@ export default function Home() {
     ? footerSocialItems.map((item) => ({
         key: item.itemKey.replace(/^social-/, "").toLowerCase(),
         url: item.linkUrl || "#",
-      })).filter((item) => socialIconMap[item.key])
+      })).filter((item) => item.key !== "twitter" && socialIconMap[item.key])
     : defaultSocialLinks;
 
   return (
@@ -712,13 +725,13 @@ export default function Home() {
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{featuredVideoTitle}</span>
         </div>
         <div className="w-full aspect-[21/9] max-h-[80vh] relative group">
-          {featuredYouTubeId && featuredVideoPlaying ? (
+          {featuredYouTubeId ? (
             <iframe
-              src={`https://www.youtube.com/embed/${featuredYouTubeId}?autoplay=1&rel=0&modestbranding=1`}
+              src={`https://www.youtube.com/embed/${featuredYouTubeId}?rel=0&modestbranding=1&playsinline=1`}
               title={featuredVideoHeadline}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
-              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
               className="absolute inset-0 h-full w-full border-0"
             />
           ) : !featuredYouTubeId ? (
@@ -734,7 +747,7 @@ export default function Home() {
           ) : (
             <img src={featuredVideoPoster} alt={featuredVideoHeadline} className="absolute inset-0 h-full w-full object-cover brightness-50 transition-all duration-500 group-hover:brightness-75" />
           )}
-          {!featuredVideoPlaying && (
+          {!featuredYouTubeId && !featuredVideoPlaying && (
             <button type="button" onClick={playFeaturedVideo} className="absolute inset-0 flex w-full flex-col items-center justify-center bg-black/10" aria-label={`Play ${featuredVideoHeadline}`}>
               <span className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-[var(--brand-yellow)] bg-[var(--brand-yellow)]/20 transition-transform duration-300 hover:scale-110 hover:bg-[var(--brand-yellow)]/30">
                 <Play className="ml-2 h-10 w-10 text-[var(--brand-yellow)]" />
@@ -743,6 +756,18 @@ export default function Home() {
                 {featuredVideoHeadline}
               </span>
             </button>
+          )}
+          {featuredVideoCtaUrl && (
+            <a
+              href={featuredVideoCtaUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="absolute bottom-5 right-5 z-20 inline-flex items-center gap-2 border border-[var(--brand-yellow)] bg-black/75 px-5 py-3 font-bebas text-lg tracking-widest text-[var(--brand-yellow)] transition-colors hover:bg-[var(--brand-yellow)] hover:text-black"
+              aria-label={`${featuredVideoCtaLabel || "Watch on YouTube"}: ${featuredVideoHeadline}`}
+            >
+              <Youtube className="h-5 w-5" />
+              {featuredVideoCtaLabel || "WATCH ON YOUTUBE"}
+            </a>
           )}
         </div>
       </section>

@@ -270,6 +270,14 @@ values
   ('booking-content', 'booking-page', 'content', 'content', 'BOOKING REQUEST', '', 'All fields are required. Please provide as much detail as possible about your event.', 2, true)
 on conflict (id) do nothing;
 
+update cms_sections
+set subtitle = 'Swazz - Dat Girl (Official Video)',
+    video_url = 'https://youtu.be/wf5oAMGFsp8?si=23R__g6Yqjpvhez6',
+    cta_label = 'WATCH ON YOUTUBE',
+    cta_url = 'https://youtu.be/wf5oAMGFsp8?si=23R__g6Yqjpvhez6',
+    updated_at = now()
+where id = 'home-featured-video';
+
 insert into cms_section_items (id, section_id, item_key, title, subtitle, description, image_url, link_url, sort_order, active, meta)
 values
   ('home-artist-hintell', 'home-artists-preview', 'hintell', 'HINTELL', 'ROSTER', '', '/hintell.jpg', '/artists/hintell', 1, true, '{}'::jsonb),
@@ -305,7 +313,6 @@ values
   ('home-footer-contact-demos', 'home-footer', 'contact-demos', 'Demo Publishing', '', '', '', 'mailto:demos@1jamaicamusic.com', 2, true, '{}'::jsonb),
   ('home-footer-contact-licensing', 'home-footer', 'contact-licensing', 'Music Licencing', '', '', '', 'mailto:licensing@1jamaicamusic.com', 3, true, '{}'::jsonb),
   ('home-footer-social-instagram', 'home-footer', 'social-instagram', 'Instagram', '', '', '', '#', 4, true, '{}'::jsonb),
-  ('home-footer-social-twitter', 'home-footer', 'social-twitter', 'Twitter', '', '', '', '#', 5, true, '{}'::jsonb),
   ('home-footer-social-facebook', 'home-footer', 'social-facebook', 'Facebook', '', '', '', '#', 6, true, '{}'::jsonb),
   ('home-footer-social-youtube', 'home-footer', 'social-youtube', 'YouTube', '', '', '', '#', 7, true, '{}'::jsonb),
   ('home-footer-social-music', 'home-footer', 'social-music', 'Music', '', '', '', '#', 8, true, '{}'::jsonb)
