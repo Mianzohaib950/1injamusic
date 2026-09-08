@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, ChevronDown, Pause, Play, Instagram, Facebook, Youtube, Music } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, ChevronDown, Play, Instagram, Facebook, Youtube, Music } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { titleToSlug } from "@/data/releases";
@@ -88,9 +88,7 @@ type CmsSection = {
 };
 
 export default function Home() {
-  const navigate = useNavigate();
   const heroRef = useRef<HTMLDivElement>(null);
-  const albumAudioRef = useRef<HTMLAudioElement>(null);
   const featuredVideoRef = useRef<HTMLVideoElement>(null);
   const heroTextRef1 = useRef<HTMLHeadingElement>(null);
   const heroTextRef2 = useRef<HTMLHeadingElement>(null);
@@ -101,23 +99,10 @@ export default function Home() {
   const stat2Ref = useRef<HTMLSpanElement>(null);
   const [cmsSections, setCmsSections] = useState<CmsSection[]>([]);
   const [publicArtists, setPublicArtists] = useState<ArtistProfile[]>(() => getCachedPublicArtists() ?? artistProfiles);
-  const [playingAlbum, setPlayingAlbum] = useState<string | null>(null);
   const [spotifyReleases, setSpotifyReleases] = useState<SpotifyRelease[]>(getCachedSpotifyReleases);
   const [spotifyLoading, setSpotifyLoading] = useState(() => getCachedSpotifyReleases().length === 0);
   const [spotifyError, setSpotifyError] = useState("");
   const [featuredVideoPlaying, setFeaturedVideoPlaying] = useState(false);
-
-  const toggleAlbum = (name: string) => {
-    const audio = albumAudioRef.current;
-    if (!audio) return;
-    if (playingAlbum === name && !audio.paused) {
-      audio.pause();
-      return;
-    }
-    if (playingAlbum !== name) audio.currentTime = 0;
-    setPlayingAlbum(name);
-    void audio.play().catch(() => setPlayingAlbum(null));
-  };
 
   useEffect(() => {
     let active = true;
@@ -774,7 +759,6 @@ export default function Home() {
 
       {/* ALBUM ART GALLERY */}
       <section className="py-24 bg-[var(--brand-dark)] overflow-hidden">
-        <audio ref={albumAudioRef} src="/latest-video.mp4" preload="metadata" onPause={() => setPlayingAlbum(null)} onEnded={() => setPlayingAlbum(null)} />
         <div className="max-w-7xl mx-auto px-6 md:px-12 mb-12">
           <span className="inline-block text-[var(--brand-yellow)] font-bebas text-xl tracking-widest">{albumGallerySection?.title || "LATEST ARTIST ALBUMS"}</span>
         </div>
@@ -783,7 +767,7 @@ export default function Home() {
           {/* Row 1 — scrolling left */}
           <div className="flex whitespace-nowrap animate-ticker group-hover/container:[animation-play-state:paused]">
             {[...albumsRow1, ...albumsRow1].map((album, i) => (
-              <button type="button" onClick={() => { if (album.spotifyRelease) cacheSpotifyReleases([album.spotifyRelease]); navigate(album.linkUrl); }} key={`row1-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
+              <div key={`row1-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]">
                 <img
                   src={album.image}
                   alt={album.name}
@@ -793,15 +777,15 @@ export default function Home() {
                   className="w-full h-full object-cover brightness-75 group-hover/item:brightness-100 transition-all duration-300"
                 />
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center p-4 text-center">
-                  <span className="flex flex-col items-center gap-2 text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{playingAlbum === album.name ? <Pause /> : <Play />} {album.name}</span>
+                  <span className="text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{album.name}</span>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
           {/* Row 2 — scrolling right */}
           <div className="flex whitespace-nowrap animate-ticker-reverse group-hover/container:[animation-play-state:paused]">
             {[...albumsRow2, ...albumsRow2].map((album, i) => (
-              <button type="button" onClick={() => { if (album.spotifyRelease) cacheSpotifyReleases([album.spotifyRelease]); navigate(album.linkUrl); }} key={`row2-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]" aria-label={`View ${album.name}`}>
+              <div key={`row2-${i}`} className="relative w-[180px] h-[180px] flex-none group/item mx-2 border border-[var(--brand-border)]">
                 <img
                   src={album.image}
                   alt={album.name}
@@ -811,9 +795,9 @@ export default function Home() {
                   className="w-full h-full object-cover brightness-75 group-hover/item:brightness-100 transition-all duration-300"
                 />
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center p-4 text-center">
-                  <span className="flex flex-col items-center gap-2 text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{playingAlbum === album.name ? <Pause /> : <Play />} {album.name}</span>
+                  <span className="text-[var(--brand-yellow)] font-bebas text-lg break-words whitespace-normal">{album.name}</span>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>
